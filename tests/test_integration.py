@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import os
-import unittest
+import pytest
 from pathlib import Path
 
 import serial  # type: ignore
@@ -20,7 +19,7 @@ except Exception:  # pragma: no cover
 
 def _load_config() -> dict:
     if _toml is None:
-        raise unittest.SkipTest("TOML parser unavailable; install 'tomli' for Python <3.11")
+        pytest.skip("TOML parser unavailable; install 'tomli' for Python <3.11", allow_module_level=True)
     root = Path(__file__).resolve().parents[1]
     cfg_path = root / "config.toml"
     with cfg_path.open("rb") as f:
@@ -34,59 +33,66 @@ def _port_available(port: str) -> bool:
     return False
 
 
-class Test_Integration(unittest.TestCase):
-    def setUp(self) -> None:
-        # Load and validate config once per test; store on self
-        cfg = _load_config()
-        serial_cfg = cfg.get("serial", {})
-        hdlc_cfg = cfg.get("hdlc", {})
+@pytest.fixture(scope="module")
+def comm_params():
+    cfg = _load_config()
+    serial_cfg = cfg.get("serial", {})
+    hdlc_cfg = cfg.get("hdlc", {})
 
-        port = str(serial_cfg.get("port")) if serial_cfg.get("port") else None
-        if not port:
-            self.skipTest("serial.port missing in config.toml")
-        assert port is not None
+    port = str(serial_cfg.get("port")) if serial_cfg.get("port") else None
+    if not port:
+        pytest.skip("serial.port missing in config.toml", allow_module_level=True)
 
-        if not _port_available(port):
-            self.skipTest(f"serial.port '{port}' not available on this system")
+    if not _port_available(port):
+        pytest.skip(f"serial.port '{port}' not available on this system", allow_module_level=True)
 
-        self.port = port
-        self.baudrate = int(serial_cfg.get("baudrate", 115200))
-        self.timeout = float(serial_cfg.get("timeout", 0.5))
-        self.crc_enabled = bool(hdlc_cfg.get("crc_enabled", False))
-        self.max_payload = int(hdlc_cfg.get("max_payload", 128))
+    baudrate = int(serial_cfg.get("baudrate", 115200))
+    timeout = float(serial_cfg.get("timeout", 0.5))
+    crc_enabled = bool(hdlc_cfg.get("crc_enabled", False))
+    max_payload = int(hdlc_cfg.get("max_payload", 128))
 
-    def test_ping_roundtrip(self) -> None:
-        try:
-            with Comm(
-                self.port,
-                baudrate=self.baudrate,
-                timeout=self.timeout,
-                crc_enabled=self.crc_enabled,
-                max_payload=self.max_payload,
-            ) as c:
-                payload = b""  # empty ping payload
-                msg = Message(
-                    command=int(Command.Ping),
-                    id=0,
-                    fragments=1,
-                    fragment=0,
-                    length=len(payload),
-                    payload=payload,
-                )
-                written = c.write_msg(msg)
-                self.assertGreater(written, 0, "No bytes written to serial port")
-
-                rx = c.read_msg(timeout=2.0)
-                self.assertIsNotNone(rx, "No response received within timeout; ensure loopback/echo is present")
-                assert rx is not None
-                self.assertEqual(rx.command, int(Command.Ping))
-                self.assertEqual(rx.id, 0)
-                self.assertEqual(rx.fragments, 1)
-                self.assertEqual(rx.fragment, 0)
-                self.assertEqual(rx.payload, payload)
-        except serial.SerialException as e:  # type: ignore
-            self.skipTest(f"Unable to open serial port '{self.port}': {e}")
+    return {
+        "port": port,
+        "baudrate": baudrate,
+        "timeout": timeout,
+        "crc_enabled": crc_enabled,
+        "max_payload": max_payload,
+    }
 
 
-if __name__ == "__main__":  # pragma: no cover
-    unittest.main()
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b"",          # empty payload
+        b"hello",     # simple text payload
+    ],
+)
+def test_ping_roundtrip_payloads(comm_params, payload: bytes) -> None:
+    try:
+        with Comm(
+            comm_params["port"],
+            baudrate=comm_params["baudrate"],
+            timeout=comm_params["timeout"],
+            crc_enabled=comm_params["crc_enabled"],
+            max_payload=comm_params["max_payload"],
+        ) as c:
+            msg = Message(
+                command=int(Command.Ping),
+                id=0,
+                fragments=1,
+                fragment=0,
+                length=len(payload),
+                payload=payload,
+            )
+            written = c.write_msg(msg)
+            assert written > 0, "No bytes written to serial port"
+
+            rx = c.read_msg(timeout=1.0)
+            assert rx is not None, "No response within timeout; ensure loopback/echo is present"
+            assert rx.command == int(Command.Ping)
+            assert rx.id == 0
+            assert rx.fragments == 1
+            assert rx.fragment == 0
+            assert rx.payload == payload
+    except serial.SerialException as e:  # type: ignore
+        pytest.skip(f"Unable to open serial port '{comm_params['port']}': {e}")

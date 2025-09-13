@@ -70,6 +70,45 @@ class TestHDLC(unittest.TestCase):
         self.assertEqual(out1, [])
         self.assertEqual(out2, [payload])
 
+    def test_empty_and_single_byte_payloads(self):
+        # Test edge cases that might lose bytes
+        test_cases = [
+            b"",
+            b"A",
+            b"AB",
+            b"ABC",
+        ]
+
+        for payload in test_cases:
+            with self.subTest(payload=payload):
+                frame = hdlc_encode(payload, escape_ctrl=True)
+
+                # Test without CRC validation
+                d = HDLCDeframer(escape_ctrl=True, require_crc=False)
+                out = d.input(frame)
+                self.assertEqual(
+                    len(out), 1, f"Should decode exactly one frame for payload {payload!r}"
+                )
+                self.assertEqual(
+                    out[0],
+                    payload,
+                    f"Payload mismatch: expected {payload!r}, got {out[0]!r}",
+                )
+
+                # Test with CRC validation
+                d_crc = HDLCDeframer(escape_ctrl=True, require_crc=True)
+                out_crc = d_crc.input(frame)
+                self.assertEqual(
+                    len(out_crc),
+                    1,
+                    f"Should decode exactly one frame with CRC for payload {payload!r}",
+                )
+                self.assertEqual(
+                    out_crc[0],
+                    payload,
+                    f"Payload mismatch with CRC: expected {payload!r}, got {out_crc[0]!r}",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

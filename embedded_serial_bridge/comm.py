@@ -65,15 +65,11 @@ class Message:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "Message":
-        if len(data) < COMMS_HEADER_LEN:
-            raise ValueError("buffer shorter than header")
         command = int.from_bytes(data[0:2], "little")
         id_ = data[2]
         fragments = int.from_bytes(data[3:5], "little")
         fragment = int.from_bytes(data[5:7], "little")
         length = int.from_bytes(data[7:9], "little")
-        if len(data) != COMMS_HEADER_LEN + length:
-            raise ValueError("length field mismatch")
         payload = data[9:9 + length]
         return cls(command=command, id=id_, fragments=fragments, fragment=fragment, length=length, payload=payload)
 
@@ -154,17 +150,9 @@ class Comm:
 
     def read_msg(self, timeout: Optional[float] = None) -> Optional[Message]:
         """Read one HDLC frame and parse a Message; returns None on timeout or invalid frame."""
-        deadline = time.time() + timeout if timeout is not None else None
-        while True:
-            if deadline is not None and time.time() >= deadline:
-                return None
-            remaining = 0 if deadline is None else max(0.0, deadline - time.time())
-            payload = self.read(timeout=remaining)
-            if payload is None:
-                continue
-            try:
-                return Message.from_bytes(payload)
-            except Exception:
-                # Ignore malformed frames and continue until timeout
-                continue
-
+        payload = self.read(timeout=timeout)
+        try:
+            return Message.from_bytes(payload)
+        except Exception as ex:
+            pass
+        return None

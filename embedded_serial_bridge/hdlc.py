@@ -81,10 +81,13 @@ class HDLCDeframer:
         return out
 
     def _finalize_frame(self, buf: bytearray) -> bytes | None:
+        # Frame must contain at least 2 bytes (the CRC)
         if len(buf) < 2:
             return None
+
         if self.require_crc:
-            if len(buf) < 3:
+            # With CRC validation, validate and strip the 2-byte CRC
+            if len(buf) < 2:  # Need at least the CRC
                 return None
             payload = bytes(buf[:-2])
             rx_fcs = buf[-2] | (buf[-1] << 8)
@@ -93,5 +96,6 @@ class HDLCDeframer:
                 return None
             return payload
         else:
+            # Without CRC validation, still strip the 2-byte CRC that was added during encoding
+            # but don't validate it
             return bytes(buf[:-2])
-
