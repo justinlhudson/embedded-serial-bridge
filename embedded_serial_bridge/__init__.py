@@ -7,11 +7,10 @@ __all__ = [
     "Comm",
     "Command",
     "Message",
-    "discover_serial_port",
-    "get_available_ports",
+    "discover",
 ]
 
 from .comm import Comm, Command, Message
-from .discovery import discover_serial_port, get_available_ports
+from .discovery import discover
 
 __version__ = "0.1.0"

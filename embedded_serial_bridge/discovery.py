@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import sys
 import os
-import time
 import platform
+import uuid
 from typing import Optional, List, Tuple
 from serial.tools import list_ports  # type: ignore
 import serial  # type: ignore
@@ -56,12 +56,12 @@ def _get_serial_config(config: dict) -> tuple[int, float, bool, int]:
     baudrate = int(serial_cfg.get("baudrate", 115200))
     timeout = float(serial_cfg.get("timeout", 1.0))
     crc_enabled = bool(hdlc_cfg.get("crc_enabled", False))
-    max_payload = int(hdlc_cfg.get("max_payload", 128))
+    max_payload = int(hdlc_cfg.get("max_payload", 4096))
 
     return baudrate, timeout, crc_enabled, max_payload
 
 
-def get_available_ports() -> List[str]:
+def _get_available_ports() -> List[str]:
     """Get list of available serial ports on the current platform."""
     ports = []
     for port_info in list_ports.comports():
@@ -69,10 +69,10 @@ def get_available_ports() -> List[str]:
     return sorted(ports)
 
 
-def get_likely_ports() -> List[str]:
+def _get_likely_ports() -> List[str]:
     """Get likely serial ports based on platform and common patterns."""
     system = platform.system().lower()
-    all_ports = get_available_ports()
+    all_ports = _get_available_ports()
 
     if system == "linux":
         # Common Linux USB-serial patterns
@@ -101,7 +101,7 @@ def get_likely_ports() -> List[str]:
     return likely
 
 
-def ping_port_test(port: str, baudrate: int = 115200, timeout: float = 1.0,
+def _ping_port_test(port: str, baudrate: int = 115200, timeout: float = 1.0,
                    crc_enabled: bool = False, max_payload: int = 128) -> bool:
     """
     Test if a serial port responds to ping command.
@@ -120,10 +120,13 @@ def ping_port_test(port: str, baudrate: int = 115200, timeout: float = 1.0,
         with Comm(port, baudrate=baudrate, timeout=timeout,
                  crc_enabled=crc_enabled, max_payload=max_payload) as comm:
 
+            # Generate unique ID from first byte of UUID
+            unique_id = uuid.uuid4().bytes[0]  # Get first byte of UUID (0-255)
+
             # Send ping with empty payload
             ping_msg = Message(
                 command=int(Command.Ping),
-                id=42,  # Use unique ID to identify our ping
+                id=unique_id,  # Use first byte of UUID as unique ID
                 fragments=1,
                 fragment=0,
                 length=0,
@@ -142,7 +145,7 @@ def ping_port_test(port: str, baudrate: int = 115200, timeout: float = 1.0,
 
             # Check if it's a valid ping response
             if (response.command == int(Command.Ping) and
-                response.id == 42):
+                response.id == unique_id):
                 return True
 
             return False
@@ -152,7 +155,7 @@ def ping_port_test(port: str, baudrate: int = 115200, timeout: float = 1.0,
         return False
 
 
-def discover_serial_port(config_path: str = "config.toml", test_all: bool = False) -> Optional[str]:
+def discover(config_path: str = "config.toml", test_all: bool = False) -> Optional[str]:
     """
     Discover the correct serial port by testing with ping commands using config settings.
 
@@ -170,21 +173,21 @@ def discover_serial_port(config_path: str = "config.toml", test_all: bool = Fals
     print(f"Using config: baudrate={baudrate}, timeout={timeout}, crc_enabled={crc_enabled}, max_payload={max_payload}")
 
     if test_all:
-        ports_to_test = get_available_ports()
+        ports_to_test = _get_available_ports()
     else:
         # Test likely ports first, then fallback to all ports
-        likely_ports = get_likely_ports()
-        all_ports = get_available_ports()
+        likely_ports = _get_likely_ports()
+        all_ports = _get_available_ports()
         other_ports = [p for p in all_ports if p not in likely_ports]
         ports_to_test = likely_ports + other_ports
 
     print(f"Discovering serial port on {platform.system()}...")
-    print(f"Available ports: {get_available_ports()}")
+    print(f"Available ports: {_get_available_ports()}")
 
     for port in ports_to_test:
         print(f"Testing {port}...", end=" ", flush=True)
 
-        if ping_port_test(port, baudrate=baudrate, timeout=timeout,
+        if _ping_port_test(port, baudrate=baudrate, timeout=timeout,
                          crc_enabled=crc_enabled, max_payload=max_payload):
             print("✓ FOUND")
             return port
@@ -196,7 +199,7 @@ def discover_serial_port(config_path: str = "config.toml", test_all: bool = Fals
 
 
 if __name__ == "__main__":
-    port = discover_serial_port()
+    port = discover()
     if port:
         print(f"\nDiscovered port: {port}")
         sys.exit(0)

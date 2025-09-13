@@ -49,7 +49,7 @@ def comm_params():
     baudrate = int(serial_cfg.get("baudrate", 115200))
     timeout = float(serial_cfg.get("timeout", 0.5))
     crc_enabled = bool(hdlc_cfg.get("crc_enabled", False))
-    max_payload = int(hdlc_cfg.get("max_payload", 128))
+    max_payload = int(hdlc_cfg.get("max_payload", 4096))
 
     return {
         "port": port,

@@ -7,7 +7,7 @@ import click
 # Handle relative imports when run as script vs module
 try:
     from .comm import Comm, Command, Message
-    from .discovery import discover_serial_port, get_available_ports
+    from .discovery import discover
 except ImportError:
     # Add parent directory to path for standalone execution
     parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,7 +15,7 @@ except ImportError:
         sys.path.insert(0, parent_dir)
 
     from embedded_serial_bridge.comm import Comm, Command, Message
-    from embedded_serial_bridge.discovery import discover_serial_port, get_available_ports
+    from embedded_serial_bridge.discovery import discover
 
 try:  # Python 3.11+
     import tomllib as _toml
@@ -66,7 +66,7 @@ def _resolve_serial(cfg: dict, allow_missing_port: bool = False) -> tuple[str, i
     timeout = float(serial_cfg.get("timeout", 0.2))
     # Always escape control; only read CRC and max payload from config
     crc_enabled = bool(hdlc_cfg.get("crc_enabled", False))
-    max_payload = int(hdlc_cfg.get("max_payload", 128))
+    max_payload = int(hdlc_cfg.get("max_payload", 4096))
     if not (0 < max_payload <= 65535):
         raise click.ClickException("hdlc.max_payload must be in 1..65535 (fits u16 length)")
     encoding = str(fmt_cfg.get("encoding", "utf-8"))
@@ -148,7 +148,7 @@ def main(command: str, config_path: str, string: Optional[str], hexstr: Optional
         if config_path == DEFAULT_CONFIG_PATH:
             discovery_config_path = _get_default_config_path()
 
-        discovered_port = discover_serial_port(config_path=discovery_config_path)
+        discovered_port = discover(config_path=discovery_config_path)
         if discovered_port:
             click.echo(f"Using discovered port: {discovered_port}")
             port = discovered_port

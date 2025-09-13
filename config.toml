@@ -12,7 +12,7 @@ timeout = 0.2
 # CRC verification on receive (true/false)
 crc_enabled = false
 # Maximum payload size in bytes (1..65535; wire length field is u16)
-max_payload = 255
+max_payload = 4096
 
 # Payload text format options
 [format]
