@@ -1,3 +1,4 @@
-.cadence/
-idea/
+.cadence/*
+.idea/*
 *.pyc
+
