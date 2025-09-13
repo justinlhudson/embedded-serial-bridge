@@ -111,9 +111,9 @@ def _build_payload(string: Optional[str], hexstr: Optional[str], encoding: str) 
 @click.argument("command")
 @click.option("--config", "config_path", type=click.Path(dir_okay=False), default=DEFAULT_CONFIG_PATH, show_default=True, help="Path to config.toml")
 @click.option("-s", "string", help="String payload (mutually exclusive with --hex)")
-@click.option("-x", "hexstr", help="Hex payload, e.g. '01 02 0a' or '01020a'")
-@click.option("--discover", is_flag=True, help="Auto-discover serial port using ping before sending command")
-def main(command: str, config_path: str, string: Optional[str], hexstr: Optional[str],
+@click.option("-x", "hex", help="Hex payload, e.g. '01 02 0a' or '01020a'")
+@click.option("--discover", is_flag=True, help="Auto-discover serial port using ping")
+def main(command: str, config_path: str, string: Optional[str], hex: Optional[str],
          discover: bool) -> None:
     """Send a command and payload using config.toml for serial settings.
 
@@ -160,7 +160,7 @@ def main(command: str, config_path: str, string: Optional[str], hexstr: Optional
         raise click.ClickException("No serial port specified. Use --discover or set serial.port in config.toml")
 
     cmd_val = _parse_command(command)
-    payload = _build_payload(string, hexstr, encoding)
+    payload = _build_payload(string, hex, encoding)
 
     # Defaults when options removed
     msg_id = 0

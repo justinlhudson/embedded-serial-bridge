@@ -155,7 +155,7 @@ def _ping_port_test(port: str, baudrate: int = 115200, timeout: float = 1.0,
         return False
 
 
-def discover(config_path: str = "config.toml", test_all: bool = False) -> Optional[str]:
+def discover(config_path: str = "config.toml") -> Optional[str]:
     """
     Discover the correct serial port by testing with ping commands using config settings.
 
@@ -172,14 +172,11 @@ def discover(config_path: str = "config.toml", test_all: bool = False) -> Option
 
     print(f"Using config: baudrate={baudrate}, timeout={timeout}, crc_enabled={crc_enabled}, max_payload={max_payload}")
 
-    if test_all:
-        ports_to_test = _get_available_ports()
-    else:
-        # Test likely ports first, then fallback to all ports
-        likely_ports = _get_likely_ports()
-        all_ports = _get_available_ports()
-        other_ports = [p for p in all_ports if p not in likely_ports]
-        ports_to_test = likely_ports + other_ports
+    # Test likely ports first, then fallback to all ports
+    likely_ports = _get_likely_ports()
+    all_ports = _get_available_ports()
+    other_ports = [p for p in all_ports if p not in likely_ports]
+    ports_to_test = likely_ports + other_ports
 
     print(f"Discovering serial port on {platform.system()}...")
     print(f"Available ports: {_get_available_ports()}")

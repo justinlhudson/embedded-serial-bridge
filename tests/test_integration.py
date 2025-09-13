@@ -4,9 +4,10 @@ import pytest
 from pathlib import Path
 
 import serial  # type: ignore
-from serial.tools import list_ports  # type: ignore
 
 from embedded_serial_bridge.comm import Comm, Message, Command
+from embedded_serial_bridge import discovery as _discovery
+from embedded_serial_bridge.discovery import discover
 
 try:  # Python 3.11+
     import tomllib as _toml
@@ -26,30 +27,40 @@ def _load_config() -> dict:
         return _toml.load(f)
 
 
-def _port_available(port: str) -> bool:
-    for p in list_ports.comports():
-        if p.device == port:
-            return True
-    return False
-
-
 @pytest.fixture(scope="module")
 def comm_params():
     cfg = _load_config()
     serial_cfg = cfg.get("serial", {})
     hdlc_cfg = cfg.get("hdlc", {})
 
-    port = str(serial_cfg.get("port")) if serial_cfg.get("port") else None
-    if not port:
-        pytest.skip("serial.port missing in config.toml", allow_module_level=True)
-
-    if not _port_available(port):
-        pytest.skip(f"serial.port '{port}' not available on this system", allow_module_level=True)
-
     baudrate = int(serial_cfg.get("baudrate", 115200))
     timeout = float(serial_cfg.get("timeout", 0.5))
     crc_enabled = bool(hdlc_cfg.get("crc_enabled", False))
     max_payload = int(hdlc_cfg.get("max_payload", 4096))
+
+    # Prefer configured port if present and working; else try discovery; else skip
+    preferred_port = serial_cfg.get("port")
+    port: str | None = None
+
+    if preferred_port:
+        ok = _discovery._ping_port_test(
+            str(preferred_port),
+            baudrate=baudrate,
+            timeout=timeout,
+            crc_enabled=crc_enabled,
+            max_payload=max_payload,
+        )
+        if ok:
+            port = str(preferred_port)
+
+    if port is None:
+        port = discover()
+
+    if not port:
+        pytest.skip(
+            "No responding serial port (configured port failed and discovery found none); skipping integration tests",
+            allow_module_level=True,
+        )
 
     return {
         "port": port,

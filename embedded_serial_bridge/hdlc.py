@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from typing import List
-
-FLAG = 0x7E
-ESC = 0x7D
-ESC_MASK = 0x20
+from typing import List, Final
 
 
 class HDLC:
-    def __init__(self, escape_ctrl: bool = False, max_frame_len: int = 4096, require_crc: bool = False):
+    FLAG: Final[int] = 0x7E
+    ESC: Final[int] = 0x7D
+    ESC_MASK: Final[int] = 0x20
+
+    def __init__(self, max_frame_len: int = 4096, escape_ctrl: bool = True, require_crc: bool = False):
         self.escape_ctrl = escape_ctrl
         self.max_frame_len = max_frame_len
         self.require_crc = require_crc
@@ -30,7 +30,7 @@ class HDLC:
 
     @staticmethod
     def _needs_escape(b: int, escape_ctrl: bool) -> bool:
-        if b in (FLAG, ESC):
+        if b in (HDLC.FLAG, HDLC.ESC):
             return True
         if escape_ctrl and b < 0x20:
             return True
@@ -39,21 +39,21 @@ class HDLC:
     def encode(self, payload: bytes) -> bytes:
         fcs = HDLC._fcs16_ppp(payload)
         frame = bytearray()
-        frame.append(FLAG)
+        frame.append(HDLC.FLAG)
         to_send = payload + bytes((fcs & 0xFF, (fcs >> 8) & 0xFF))
         for b in to_send:
             if HDLC._needs_escape(b, self.escape_ctrl):
-                frame.append(ESC)
-                frame.append(b ^ ESC_MASK)
+                frame.append(HDLC.ESC)
+                frame.append(b ^ HDLC.ESC_MASK)
             else:
                 frame.append(b)
-        frame.append(FLAG)
+        frame.append(HDLC.FLAG)
         return bytes(frame)
 
     def decode(self, data: bytes) -> List[bytes]:
         out: List[bytes] = []
         for b in data:
-            if b == FLAG:
+            if b == HDLC.FLAG:
                 if self._buf:
                     payload = self._finalize_frame(self._buf)
                     if payload is not None:
@@ -63,9 +63,9 @@ class HDLC:
                 continue
 
             if self._esc:
-                b = b ^ ESC_MASK
+                b = b ^ HDLC.ESC_MASK
                 self._esc = False
-            elif b == ESC:
+            elif b == HDLC.ESC:
                 self._esc = True
                 continue
 
@@ -95,3 +95,9 @@ class HDLC:
             # Without CRC validation, still strip the 2-byte CRC that was added during encoding
             # but don't validate it
             return bytes(buf[:-2])
+
+
+# Backward-compatible module-level aliases
+FLAG = HDLC.FLAG
+ESC = HDLC.ESC
+ESC_MASK = HDLC.ESC_MASK
