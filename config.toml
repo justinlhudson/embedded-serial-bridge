@@ -1,0 +1,20 @@
+# Serial configuration for pyserial-bridge CLI
+[serial]
+# Set your serial port (e.g., "/dev/ttyUSB0" on Linux, "/dev/tty.usbserial-xxxxx" on macOS, or "COM3" on Windows)
+port = "/dev/cu.usbmodem1303"
+# Baud rate
+baudrate = 115200
+# Read timeout in seconds
+timeout = 0.2
+
+# HDLC options
+[hdlc]
+# CRC verification on receive (true/false)
+crc_enabled = false
+# Maximum payload size in bytes (1..65535; wire length field is u16)
+max_payload = 255
+
+# Payload text format options
+[format]
+# Default encoding for --string inputs
+encoding = "utf-8"
