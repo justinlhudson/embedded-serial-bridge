@@ -1,10 +1,7 @@
 from __future__ import annotations
-
 import sys
 from typing import Optional
-
 import click
-
 from .comm import Comm, Command, Message
 
 try:  # Python 3.11+
@@ -50,9 +47,9 @@ def _resolve_serial(cfg: dict) -> tuple[str, int, float, bool, int, str]:
 
 
 def _parse_command(value: str) -> int:
-    # Accept symbolic (ack/nak/ping), hex (0x..), or decimal
+    # Accept symbolic (ack/nak/ping/raw), hex (0x..), or decimal
     name = value.strip().lower()
-    alias = {"ack": Command.Ack, "nak": Command.Nak, "ping": Command.Ping}
+    alias = {"ack": Command.Ack, "nak": Command.Nak, "ping": Command.Ping, "raw": Command.Raw}
     if name in alias:
         return int(alias[name])
     try:
@@ -108,4 +105,3 @@ def main(command: str, config_path: str, string: Optional[str], hexstr: Optional
             c.write_msg(msg)
         except Exception as e:
             raise click.ClickException(str(e))
-

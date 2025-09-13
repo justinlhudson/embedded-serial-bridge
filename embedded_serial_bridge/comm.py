@@ -16,13 +16,14 @@ from dataclasses import dataclass
 # - payload:      [u8; length]
 COMMS_HEADER_LEN: int = 9
 # Default max payload (configurable via Comm)
-DEFAULT_MAX_PAYLOAD: int = 128
+DEFAULT_MAX_PAYLOAD: int = 256
 
 
 class Command(IntEnum):
     Ack = 0x01
     Nak = 0x02
     Ping = 0x03
+    Raw = 0x04
 
     @classmethod
     def from_u16(cls, value: int) -> "Command":
@@ -35,9 +36,9 @@ class Command(IntEnum):
 @dataclass
 class Message:
     command: int
-    id: int
-    fragments: int
-    fragment: int
+    id: int # future use (e.g., for matching requests/responses)
+    fragments: int  # future use
+    fragment: int   # future use
     length: int
     payload: bytes
 
