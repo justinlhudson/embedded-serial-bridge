@@ -7,7 +7,7 @@ import click
 # Handle relative imports when run as script vs module
 try:
     from .comm import Comm, Command, Message
-    from .discovery import discover
+    from .discovery import discover as discover_ports
 except ImportError:
     # Add parent directory to path for standalone execution
     parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,7 +15,7 @@ except ImportError:
         sys.path.insert(0, parent_dir)
 
     from embedded_serial_bridge.comm import Comm, Command, Message
-    from embedded_serial_bridge.discovery import discover
+    from embedded_serial_bridge.discovery import discover as discover_ports
 
 try:  # Python 3.11+
     import tomllib as _toml
@@ -148,7 +148,7 @@ def main(command: str, config_path: str, string: Optional[str], hexstr: Optional
         if config_path == DEFAULT_CONFIG_PATH:
             discovery_config_path = _get_default_config_path()
 
-        discovered_port = discover(config_path=discovery_config_path)
+        discovered_port = discover_ports(config_path=discovery_config_path)
         if discovered_port:
             click.echo(f"Using discovered port: {discovered_port}")
             port = discovered_port
@@ -171,12 +171,12 @@ def main(command: str, config_path: str, string: Optional[str], hexstr: Optional
         try:
             # Use high-level Message API
             msg = Message(command=cmd_val, id=msg_id, fragments=fragments, fragment=fragment, length=len(payload), payload=payload)
-            written = c.write_msg(msg)
+            written = c.write(msg)
             click.echo(f"Sent {written} bytes to {port}")
 
             # Try to read response/echo back
             click.echo("Waiting for response...")
-            response = c.read_msg(timeout=3.0)  # Wait up to 3 seconds for response
+            response = c.read(timeout=3.0, message=True)  # Wait up to 3 seconds for response
 
             if response is not None:
                 click.echo(f"Received response:")

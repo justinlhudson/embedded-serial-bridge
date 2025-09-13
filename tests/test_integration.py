@@ -84,10 +84,10 @@ def test_ping_roundtrip_payloads(comm_params, payload: bytes) -> None:
                 length=len(payload),
                 payload=payload,
             )
-            written = c.write_msg(msg)
+            written = c.write(msg)
             assert written > 0, "No bytes written to serial port"
 
-            rx = c.read_msg(timeout=1.0)
+            rx = c.read(timeout=1.0, message=True)
             assert rx is not None, "No response within timeout; ensure loopback/echo is present"
             assert rx.command == int(Command.Ping)
             assert rx.id == 0

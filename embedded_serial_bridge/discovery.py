@@ -134,12 +134,12 @@ def _ping_port_test(port: str, baudrate: int = 115200, timeout: float = 1.0,
             )
 
             # Send ping
-            written = comm.write_msg(ping_msg)
+            written = comm.write(ping_msg)
             if written <= 0:
                 return False
 
             # Wait for response
-            response = comm.read_msg(timeout=timeout)
+            response = comm.read(timeout=timeout, message=True)
             if response is None:
                 return False
 
@@ -201,7 +201,7 @@ def discover(config_path: str = "config.toml", test_all: bool = False) -> Option
 if __name__ == "__main__":
     port = discover()
     if port:
-        print(f"\nDiscovered port: {port}")
+        print(f"\n{port}")
         sys.exit(0)
     else:
         sys.exit(1)

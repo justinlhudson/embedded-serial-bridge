@@ -1,22 +1,12 @@
 from __future__ import annotations
 
 import time
-from typing import Optional, List
+from typing import Optional, List, Final, Union
 import serial
-from .hdlc import hdlc_encode, HDLCDeframer
+from .hdlc import HDLC
 from enum import IntEnum
-from dataclasses import dataclass
 
-# Comms message format (little-endian):
-# - command:      u16
-# - id:           u8
-# - fragments:    u16 (total fragments)
-# - fragment:     u16 (0-based index)
-# - length:       u16 (payload length in bytes)
-# - payload:      [u8; length]
-COMMS_HEADER_LEN: int = 9
-# Default max payload (configurable via Comm)
-DEFAULT_MAX_PAYLOAD: int = 256
+DEFAULT_MAX_PAYLOAD: int = 4096
 
 
 class Command(IntEnum):
@@ -25,22 +15,17 @@ class Command(IntEnum):
     Ping = 0x03
     Raw = 0x04
 
-    @classmethod
-    def from_u16(cls, value: int) -> "Command":
-        try:
-            return cls(value)
-        except ValueError:
-            raise ValueError("unknown Command")
-
-
-@dataclass
 class Message:
-    command: int
-    id: int # future use (e.g., for matching requests/responses)
-    fragments: int  # future use
-    fragment: int   # future use
-    length: int
-    payload: bytes
+    # Header length constant (bytes) for the message format above
+    HEADER_LEN: Final[int] = 9
+
+    def __init__(self, *, command: int, id: int, fragments: int, fragment: int, length: int, payload: bytes) -> None:
+        self.command = command
+        self.id = id
+        self.fragments = fragments
+        self.fragment = fragment
+        self.length = length
+        self.payload = payload
 
     def to_bytes(self) -> bytes:
         if not (0 <= self.command <= 0xFFFF):
@@ -82,23 +67,23 @@ class Comm:
     - Optional CRC verification on receive (require_crc) and configurable max payload.
     """
 
-    _ser: serial.Serial
-    _deframer: HDLCDeframer
+    _serial: serial.Serial
+    _hdlc: HDLC
     _rx_queue: List[bytes]
     _crc_enabled: bool
     _max_payload: int
 
     def __init__(self, port: str, baudrate: int = 115200, timeout: float = 0.1, *, crc_enabled: bool = False, max_payload: int = DEFAULT_MAX_PAYLOAD, **serial_kwargs) -> None:
         # Keep constructor minimal but allow overrides via kwargs (e.g., bytesize, parity, stopbits, rtscts, etc.)
-        self._ser = serial.Serial(port=port, baudrate=baudrate, timeout=timeout, write_timeout=1.0, **serial_kwargs)
+        self._serial = serial.Serial(port=port, baudrate=baudrate, timeout=timeout, write_timeout=1.0, **serial_kwargs)
         self._crc_enabled = bool(crc_enabled)
         self._max_payload = int(max_payload)
-        self._deframer = HDLCDeframer(escape_ctrl=True, require_crc=self._crc_enabled)
+        self._hdlc = HDLC(escape_ctrl=True, require_crc=self._crc_enabled)
         self._rx_queue = []
 
     def close(self) -> None:
         try:
-            self._ser.close()
+            self._serial.close()
         except Exception:
             pass
 
@@ -108,29 +93,36 @@ class Comm:
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
 
-    def write(self, payload: bytes) -> int:
-        frame = hdlc_encode(payload, escape_ctrl=True)
-        return self._ser.write(frame)
+    def write(self, data: Union[bytes, Message]) -> int:
+        """Write either raw payload bytes or a Message.
+        Returns number of bytes written to the serial port.
+        """
+        if isinstance(data, Message):
+            pl_len = len(data.payload or b"")
+            if pl_len > self._max_payload:
+                raise ValueError(f"payload too large (max {self._max_payload} bytes)")
+            frame = self._hdlc.encode(data.to_bytes())
+        else:
+            raw = bytes(data)
+            if len(raw) > self._max_payload:
+                raise ValueError(f"payload too large (max {self._max_payload} bytes)")
+            frame = self._hdlc.encode(raw)
+        return self._serial.write(frame)
 
-    # High-level helpers using Message
-    def write_msg(self, msg: Message) -> int:
-        # Enforce max payload size before framing
-        pl_len = len(msg.payload or b"")
-        if pl_len > self._max_payload:
-            raise ValueError(f"payload too large (max {self._max_payload} bytes)")
-        return self.write(msg.to_bytes())
-
-    def send_payload(self, command: int | Command, payload: bytes, *, id: int = 0, fragments: int = 1, fragment: int = 0) -> int:
-        if len(payload) > self._max_payload:
-            raise ValueError(f"payload too large (max {self._max_payload} bytes)")
-        cmd_val = int(command)
-        msg = Message(command=cmd_val, id=id, fragments=fragments, fragment=fragment, length=len(payload), payload=payload)
-        return self.write_msg(msg)
-
-    def read(self, timeout: Optional[float] = None) -> Optional[bytes]:
+    def read(self, timeout: Optional[float] = None, *, message: bool = True) -> Optional[Union[bytes, Message]]:
+        """Read one HDLC frame.
+        - If message=True (default), parses and returns a Message object, or None on timeout/parse failure.
+        - If message=False, returns the raw payload bytes (without CRC), or None on timeout.
+        """
         # Return any previously decoded payload first
         if self._rx_queue:
-            return self._rx_queue.pop(0)
+            payload = self._rx_queue.pop(0)
+            if message:
+                try:
+                    return Message.from_bytes(payload)
+                except Exception:
+                    return None
+            return payload
 
         deadline = time.time() + timeout if timeout is not None else None
         while True:
@@ -138,22 +130,19 @@ class Comm:
                 return None
 
             # Read available bytes or at least one
-            n = self._ser.in_waiting or 1
-            chunk = self._ser.read(n)
+            n = self._serial.in_waiting or 1
+            chunk = self._serial.read(n)
             if not chunk:
                 continue
 
-            frames = self._deframer.input(chunk)
+            frames = self._hdlc.decode(chunk)
             if frames:
                 # Cache any extras and return one payload
                 self._rx_queue.extend(frames[1:])
-                return frames[0]
-
-    def read_msg(self, timeout: Optional[float] = None) -> Optional[Message]:
-        """Read one HDLC frame and parse a Message; returns None on timeout or invalid frame."""
-        payload = self.read(timeout=timeout)
-        try:
-            return Message.from_bytes(payload)
-        except Exception as ex:
-            pass
-        return None
+                payload = frames[0]
+                if message:
+                    try:
+                        return Message.from_bytes(payload)
+                    except Exception:
+                        return None
+                return payload

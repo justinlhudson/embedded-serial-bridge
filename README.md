@@ -60,10 +60,10 @@ from embedded_serial_bridge import Comm, Command, Message
 with Comm("/dev/ttyUSB0", baudrate=115200, timeout=0.2, crc_enabled=False, max_payload=65535) as c:
     # Build and send a Ping with empty payload
     msg = Message(command=int(Command.Ping), id=0, fragments=1, fragment=0, length=0, payload=b"")
-    c.write_msg(msg)
+    c.write(msg)
 
     # Read a response (returns Message or None)
-    rx = c.read_msg(timeout=1.0)
+    rx = c.read(timeout=1.0, message=True)
     if rx:
         print("RX cmd=", rx.command, "len=", rx.length)
 ```
