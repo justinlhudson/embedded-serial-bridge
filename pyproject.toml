@@ -7,7 +7,7 @@ name = "embedded-serial-bridge"
 version = "0.1.0"
 description = "Embedded serial bridge with HDLC framing and simple CLI"
 readme = "README.md"
-authors = [{ name = "Your Name" }]
+authors = [{ name = "Justin L Hudson" }]
 license = { text = "MIT" }
 requires-python = ">=3.8"
 dependencies = [
