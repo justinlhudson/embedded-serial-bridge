@@ -53,16 +53,29 @@ from embedded_serial_bridge import Comm, Command, Message, discover
   - read(timeout: float | None = None, *, message: bool = True) -> Message | bytes | None
     - When `message=True` (default), parses and returns a Message; returns None on timeout or parse failure.
     - When `message=False`, returns raw payload bytes.
-  - Context manager supported: with Comm(...) as c: ...
 
 - Command (enum.IntEnum)
-  - Ack = 0x01, Nak = 0x02, Ping = 0x03, Raw = 0x04
+
+| Command | Value (hex) |
+|---------|-------------|
+| Ack     | 0x01        |
+| Nak     | 0x02        |
+| Ping    | 0x03        |
+| Raw     | 0x04        |
 
 - Message
-  - Fields: command: u16, id: u8, fragments: u16, fragment: u16, length: u16, payload: bytes
+
+| Field     | Type | Notes                   |
+|-----------|------|-------------------------|
+| command   | u16  |                         |
+| id        | u8   | Not used (TBD for user) |
+| fragments | u16  | Not used (TBD for user) |
+| fragment  | u16  | Not used (TBD for user) |
+| length    | u16  |                         |
+| payload   | bytes|                         |
 
 - discover(config_path: str = "config.toml") -> str | None
-  - Probes likely ports on the host using a Ping and returns the first responding port, or None.
+  - **Probes likely ports on the host using a Ping and returns the first responding port**, or None.
   - Uses serial/HDLC settings from the given config.
 
 ## CLI usage
