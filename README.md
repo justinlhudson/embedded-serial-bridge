@@ -75,7 +75,9 @@ from embedded_serial_bridge import Comm, Command, Message, discover
 | payload   | bytes|                         |
 
 - discover(config_path: str = "config.toml") -> str | None
-  - **Probes likely ports on the host using a Ping and returns the first responding port**, or None.
+
+> **IMPORTANT:** **Probes likely ports on the host using a Ping and returns the first responding port**.
+
   - Uses serial/HDLC settings from the given config.
 
 ## CLI usage
