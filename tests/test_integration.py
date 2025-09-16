@@ -76,9 +76,14 @@ def comm_params():
     [
         b"",          # empty payload
         b"hello",     # simple text payload
+        "MAX_PAYLOAD_COUNTING",  # sentinel for max payload counting pattern
     ],
 )
-def test_ping_roundtrip_payloads(comm_params, payload: bytes) -> None:
+def test_ping_roundtrip_payloads(comm_params, payload) -> None:
+    if payload == "MAX_PAYLOAD_COUNTING":
+        max_payload = comm_params["max_payload"]
+        # Counting pattern: 0x00, 0x01, ..., 0xFF, 0x00, ...
+        payload = bytes([i % 256 for i in range(int(128))])
     try:
         with Comm(
             comm_params["port"],
@@ -107,3 +112,5 @@ def test_ping_roundtrip_payloads(comm_params, payload: bytes) -> None:
             assert rx.payload == payload
     except serial.SerialException as e:  # type: ignore
         pytest.skip(f"Unable to open serial port '{comm_params['port']}': {e}")
+
+
