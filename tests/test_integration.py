@@ -113,4 +113,7 @@ def test_ping_roundtrip_payloads(comm_params, payload) -> None:
     except serial.SerialException as e:  # type: ignore
         pytest.skip(f"Unable to open serial port '{comm_params['port']}': {e}")
 
+def test_forever(comm_params):
+    while True:
+        test_ping_roundtrip_payloads(comm_params, "MAX_PAYLOAD_COUNTING")
 
