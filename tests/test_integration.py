@@ -83,7 +83,7 @@ def test_ping_roundtrip_payloads(comm_params, payload) -> None:
     if payload == "MAX_PAYLOAD_COUNTING":
         max_payload = comm_params["max_payload"]
         # Counting pattern: 0x00, 0x01, ..., 0xFF, 0x00, ...
-        payload = bytes([i % 256 for i in range(int(128))])
+        payload = bytes([i % 256 for i in range(int(max_payload))])
     try:
         with Comm(
             comm_params["port"],
