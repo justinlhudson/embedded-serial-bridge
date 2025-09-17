@@ -55,10 +55,10 @@ def _get_serial_config(config: dict) -> tuple[int, float, bool, int]:
 
     baudrate = int(serial_cfg.get("baudrate", 115200))
     timeout = float(serial_cfg.get("timeout", 1.0))
-    crc_enabled = bool(hdlc_cfg.get("crc_enabled", False))
-    max_payload = int(hdlc_cfg.get("max_payload", 4096))
+    fcs = bool(hdlc_cfg.get("fcs", False))
+    payload_limit = int(hdlc_cfg.get("payload_limit", 4096))
 
-    return baudrate, timeout, crc_enabled, max_payload
+    return baudrate, timeout, fcs, payload_limit
 
 
 def _get_available_ports() -> List[str]:
@@ -102,7 +102,7 @@ def _get_likely_ports() -> List[str]:
 
 
 def _ping_port_test(port: str, baudrate: int = 115200, timeout: float = 1.0,
-                   crc_enabled: bool = False, max_payload: int = 128) -> bool:
+                   fcs: bool = False, payload_limit: int = 128) -> bool:
     """
     Test if a serial port responds to ping command.
 
@@ -110,15 +110,15 @@ def _ping_port_test(port: str, baudrate: int = 115200, timeout: float = 1.0,
         port: Serial port device path
         baudrate: Baud rate for communication
         timeout: Timeout for response in seconds
-        crc_enabled: Enable CRC validation
-        max_payload: Maximum payload size
+        fcs: Enable FCS validation
+        payload_limit: Maximum payload size
 
     Returns:
         True if port responds to ping, False otherwise
     """
     try:
         with Comm(port, baudrate=baudrate, timeout=timeout,
-                 crc_enabled=crc_enabled, max_payload=max_payload) as comm:
+                 fcs=fcs, payload_limit=payload_limit) as comm:
 
             # Generate unique ID from first byte of UUID
             unique_id = uuid.uuid4().bytes[0]  # Get first byte of UUID (0-255)
@@ -161,16 +161,15 @@ def discover(config_path: str = "config.toml") -> Optional[str]:
 
     Args:
         config_path: Path to config.toml file
-        test_all: If True, test all ports; if False, test likely ports first
 
     Returns:
         Path to working serial port, or None if none found
     """
     # Load configuration
     config = _load_config(config_path)
-    baudrate, timeout, crc_enabled, max_payload = _get_serial_config(config)
+    baudrate, timeout, fcs, payload_limit = _get_serial_config(config)
 
-    print(f"Using config: baudrate={baudrate}, timeout={timeout}, crc_enabled={crc_enabled}, max_payload={max_payload}")
+    print(f"Using config: baudrate={baudrate}, timeout={timeout}, fcs={fcs}, payload_limit={payload_limit}")
 
     # Test likely ports first, then fallback to all ports
     likely_ports = _get_likely_ports()
@@ -185,7 +184,7 @@ def discover(config_path: str = "config.toml") -> Optional[str]:
         print(f"Testing {port}...", end=" ", flush=True)
 
         if _ping_port_test(port, baudrate=baudrate, timeout=timeout,
-                         crc_enabled=crc_enabled, max_payload=max_payload):
+                         fcs=fcs, payload_limit=payload_limit):
             print("✓ FOUND")
             return port
         else:

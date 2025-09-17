@@ -37,8 +37,8 @@ def comm_params():
 
     baudrate = int(serial_cfg.get("baudrate", 115200))
     timeout = float(serial_cfg.get("timeout", 0.5))
-    crc_enabled = bool(hdlc_cfg.get("crc_enabled", False))
-    max_payload = int(hdlc_cfg.get("max_payload", 4096))
+    fcs = bool(hdlc_cfg.get("fcs", False))
+    payload_limit = int(hdlc_cfg.get("payload_limit", 4096))
 
     # Prefer configured port if present and working; else try discovery; else skip
     preferred_port = serial_cfg.get("port")
@@ -49,8 +49,8 @@ def comm_params():
             str(preferred_port),
             baudrate=baudrate,
             timeout=timeout,
-            crc_enabled=crc_enabled,
-            max_payload=max_payload,
+            fcs=fcs,
+            payload_limit=payload_limit,
         )
         if ok:
             port = str(preferred_port)
@@ -68,8 +68,8 @@ def comm_params():
         "port": port,
         "baudrate": baudrate,
         "timeout": timeout,
-        "crc_enabled": crc_enabled,
-        "max_payload": max_payload,
+        "fcs": fcs,
+        "payload_limit": payload_limit,
     }
 
 
@@ -83,16 +83,16 @@ def comm_params():
 )
 def test_ping_roundtrip_payloads(comm_params, payload) -> None:
     if payload == "MAX_PAYLOAD_COUNTING":
-        max_payload = comm_params["max_payload"]
+        payload_limit = comm_params["payload_limit"]
         # Counting pattern: 0x00, 0x01, ..., 0xFF, 0x00, ...
-        payload = bytes([i % 256 for i in range(int(max_payload))])
+        payload = bytes([i % 256 for i in range(int(payload_limit))])
     try:
         with Comm(
-            comm_params["port"],
+            discover(),
             baudrate=comm_params["baudrate"],
             timeout=comm_params["timeout"],
-            crc_enabled=comm_params["crc_enabled"],
-            max_payload=comm_params["max_payload"],
+            fcs=comm_params["fcs"],
+            payload_limit=comm_params["payload_limit"],
         ) as c:
             msg = Message(
                 command=int(Command.Ping),
@@ -106,6 +106,8 @@ def test_ping_roundtrip_payloads(comm_params, payload) -> None:
             assert written > 0, "No bytes written to serial port"
 
             rx = c.read(timeout=1.0, message=True)
+            if rx is False:
+                pytest.fail("CRC check failed (FCS failed!) on received message")
             assert rx is not None, "No response within timeout; ensure loopback/echo is present"
             assert rx.command == int(Command.Ping)
             assert rx.id == 0

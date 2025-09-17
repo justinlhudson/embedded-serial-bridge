@@ -10,16 +10,43 @@ DEFAULT_MAX_PAYLOAD: int = 4096
 
 
 class Command(IntEnum):
+    """
+    Command types for embedded serial bridge protocol.
+    Ack = 0x01: Acknowledge
+    Nak = 0x02: Negative acknowledge
+    Ping = 0x03: Ping (for discovery/echo)
+    Raw = 0x04: Raw data
+    """
     Ack = 0x01
     Nak = 0x02
     Ping = 0x03
     Raw = 0x04
 
 class Message:
-    # Header length constant (bytes) for the message format above
+    """
+    Represents a protocol message for the embedded serial bridge.
+    Fields:
+        command: u16
+        id: u8
+        fragments: u16
+        fragment: u16
+        length: u16
+        payload: bytes
+    HEADER_LEN: Number of bytes in the header (9).
+    """
     HEADER_LEN: Final[int] = 9
 
     def __init__(self, *, command: int, id: int, fragments: int, fragment: int, length: int, payload: bytes) -> None:
+        """
+        Initialize a Message instance.
+        Args:
+            command (int): Command type (u16)
+            id (int): Message ID (u8)
+            fragments (int): Total fragments (u16)
+            fragment (int): Fragment index (u16)
+            length (int): Payload length (u16)
+            payload (bytes): Message payload
+        """
         self.command = command
         self.id = id
         self.fragments = fragments
@@ -28,6 +55,13 @@ class Message:
         self.payload = payload
 
     def to_bytes(self) -> bytes:
+        """
+        Serialize the message to bytes (header + payload).
+        Returns:
+            bytes: Serialized message
+        Raises:
+            ValueError: If any field is out of range or payload too large
+        """
         if not (0 <= self.command <= 0xFFFF):
             raise ValueError("command out of range (u16)")
         if not (0 <= self.id <= 0xFF):
@@ -51,6 +85,13 @@ class Message:
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "Message":
+        """
+        Parse a Message from bytes.
+        Args:
+            data (bytes): Byte sequence containing header and payload
+        Returns:
+            Message: Parsed message
+        """
         command = int.from_bytes(data[0:2], "little")
         id_ = data[2]
         fragments = int.from_bytes(data[3:5], "little")
@@ -62,57 +103,93 @@ class Message:
 
 class Comm:
     """
-    Minimal serial comms using shared HDLC framing (see hdlc.py) and CRC-16/X25.
-    - Always escapes control characters (<0x20) in addition to FLAG/ESC.
-    - Optional CRC verification on receive (require_crc) and configurable max payload.
+    Serial communication handler for embedded serial bridge protocol.
+    Uses HDLC framing and CRC-16/X25 for robust message transfer.
+    Features:
+        - Escapes control characters (<0x20), FLAG, and ESC
+        - Optional CRC verification on receive
+        - Configurable max payload size
     """
 
     _serial: serial.Serial
     _hdlc: HDLC
     _rx_queue: List[bytes]
-    _crc_enabled: bool
-    _max_payload: int
+    _fcs: bool
+    _payload_limit: int
 
-    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 0.1, *, crc_enabled: bool = False, max_payload: int = DEFAULT_MAX_PAYLOAD, **serial_kwargs) -> None:
+    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 0.1, *, fcs: bool = False, payload_limit: int = DEFAULT_MAX_PAYLOAD, **serial_kwargs) -> None:
+        """
+        Initialize Comm for serial port communication.
+        Args:
+            port (str): Serial port name
+            baudrate (int): Baud rate
+            timeout (float): Read timeout in seconds
+            fcs (bool): Enable FCS (CRC) checking on receive
+            payload_limit (int): Maximum allowed payload size
+            serial_kwargs: Additional serial.Serial arguments
+        """
         # Keep constructor minimal but allow overrides via kwargs (e.g., bytesize, parity, stopbits, rtscts, etc.)
         self._serial = serial.Serial(port=port, baudrate=baudrate, timeout=timeout, write_timeout=1.0, **serial_kwargs)
-        self._crc_enabled = bool(crc_enabled)
-        self._max_payload = int(max_payload)
-        self._hdlc = HDLC(escape_ctrl=True, require_crc=self._crc_enabled)
+        self._fcs = bool(fcs)
+        self._payload_limit = int(payload_limit)
+        self._hdlc = HDLC(escape_ctrl=True, require_crc=self._fcs)
         self._rx_queue = []
 
     def close(self) -> None:
+        """
+        Close the serial port.
+        """
         try:
             self._serial.close()
         except Exception:
             pass
 
     def __enter__(self) -> "Comm":
+        """
+        Enter context manager, returns self.
+        """
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        """
+        Exit context manager, closes serial port.
+        """
         self.close()
 
     def write(self, data: Union[bytes, Message]) -> int:
-        """Write either raw payload bytes or a Message.
-        Returns number of bytes written to the serial port.
+        """
+        Write a raw payload or Message to the serial port.
+        Args:
+            data (bytes or Message): Data to send
+        Returns:
+            int: Number of bytes written
+        Raises:
+            ValueError: If payload exceeds payload_limit
         """
         if isinstance(data, Message):
             pl_len = len(data.payload or b"")
-            if pl_len > self._max_payload:
-                raise ValueError(f"payload too large (max {self._max_payload} bytes)")
+            if pl_len > self._payload_limit:
+                raise ValueError(f"payload too large (max {self._payload_limit} bytes)")
             frame = self._hdlc.encode(data.to_bytes())
         else:
             raw = bytes(data)
-            if len(raw) > self._max_payload:
-                raise ValueError(f"payload too large (max {self._max_payload} bytes)")
+            if len(raw) > self._payload_limit:
+                raise ValueError(f"payload too large (max {self._payload_limit} bytes)")
             frame = self._hdlc.encode(raw)
         return self._serial.write(frame)
 
     def read(self, timeout: Optional[float] = None, *, message: bool = True) -> Optional[Union[bytes, Message]]:
-        """Read one HDLC frame.
-        - If message=True (default), parses and returns a Message object, or None on timeout/parse failure.
-        - If message=False, returns the raw payload bytes (without CRC), or None on timeout.
+        """
+        Read one HDLC frame from the serial port.
+        Args:
+            timeout (float, optional): Timeout in seconds
+            message (bool): If True, parse and return Message; else return raw bytes
+        Returns:
+            Message or bytes or None or False:
+                - Message: Parsed message if message=True
+                - bytes: Raw payload if message=False
+                - None: On timeout or parse failure
+                - False: If CRC check fails
         """
         # Return any previously decoded payload first
         if self._rx_queue:
@@ -135,7 +212,14 @@ class Comm:
             if not chunk:
                 continue
 
-            frames = self._hdlc.decode(chunk)
+            frames = []
+            try:
+                frames = self._hdlc.decode(chunk)
+            except ValueError as ex:
+                return False
+            except Exception as ex:
+                return None
+
             if frames:
                 # Cache any extras and return one payload
                 self._rx_queue.extend(frames[1:])
