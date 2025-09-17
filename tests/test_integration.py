@@ -95,8 +95,13 @@ def test_ping_roundtrip_payloads(comm_params, payload) -> None:
         pytest.skip(f"Unable to open serial port '{comm_params['port']}': {e}")
 
 def test_forever(comm_params):
+    """
+    Run the ping roundtrip test in a loop, printing CRC error count and sleeping between iterations.
+    This function is for manual soak/robustness testing and does not assert or return anything.
+    """
     while True:
         test_ping_roundtrip_payloads(comm_params, "MAX_PAYLOAD_COUNTING")
+        print(f"Total CRC errors so far: {getattr(test_ping_roundtrip_payloads, 'crc_error_count', 0)}")
         time.sleep(0.01)
 
 if __name__ == "__main__":
