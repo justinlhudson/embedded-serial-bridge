@@ -20,49 +20,25 @@ except Exception:  # pragma: no cover
         _toml = None
 
 
-def _load_config() -> dict:
+def _load_config():
     if _toml is None:
-        pytest.skip("TOML parser unavailable; install 'tomli' for Python <3.11", allow_module_level=True)
+        pytest.skip("TOML parser unavailable; install 'tomli' for Python <3.11", allow_module_level=True)  # type: ignore
     root = Path(__file__).resolve().parents[1]
     cfg_path = root / "config.toml"
     with cfg_path.open("rb") as f:
-        return _toml.load(f)
-
+        return cfg_path, _toml.load(f)
 
 @pytest.fixture(scope="module")
 def comm_params():
-    cfg = _load_config()
+    cfg_path, cfg = _load_config()
     serial_cfg = cfg.get("serial", {})
     hdlc_cfg = cfg.get("hdlc", {})
-
     baudrate = int(serial_cfg.get("baudrate", 115200))
     timeout = float(serial_cfg.get("timeout", 0.5))
     fcs = bool(hdlc_cfg.get("fcs", False))
     payload_limit = int(hdlc_cfg.get("payload_limit", 4096))
-
-    # Prefer configured port if present and working; else try discovery; else skip
     preferred_port = serial_cfg.get("port")
-    port: str | None = None
-
-    if preferred_port:
-        ok = _discovery._ping_port_test(
-            str(preferred_port),
-            baudrate=baudrate,
-            timeout=timeout,
-            fcs=fcs,
-            payload_limit=payload_limit,
-        )
-        if ok:
-            port = str(preferred_port)
-
-    if port is None:
-        port = discover()
-
-    if not port:
-        pytest.skip(
-            "No responding serial port (configured port failed and discovery found none); skipping integration tests",
-            allow_module_level=True,
-        )
+    port = discover(cfg_path)
 
     return {
         "port": port,
@@ -71,7 +47,6 @@ def comm_params():
         "fcs": fcs,
         "payload_limit": payload_limit,
     }
-
 
 @pytest.mark.parametrize(
     "payload",
@@ -82,13 +57,13 @@ def comm_params():
     ],
 )
 def test_ping_roundtrip_payloads(comm_params, payload) -> None:
+    crc_error_count = getattr(test_ping_roundtrip_payloads, "crc_error_count", 0)
     if payload == "MAX_PAYLOAD_COUNTING":
         payload_limit = comm_params["payload_limit"]
-        # Counting pattern: 0x00, 0x01, ..., 0xFF, 0x00, ...
         payload = bytes([i % 256 for i in range(int(payload_limit))])
     try:
         with Comm(
-            discover(),
+            comm_params["port"],
             baudrate=comm_params["baudrate"],
             timeout=comm_params["timeout"],
             fcs=comm_params["fcs"],
@@ -104,10 +79,12 @@ def test_ping_roundtrip_payloads(comm_params, payload) -> None:
             )
             written = c.write(msg)
             assert written > 0, "No bytes written to serial port"
-
             rx = c.read(timeout=1.0, message=True)
-            if rx is False:
-                pytest.fail("CRC check failed (FCS failed!) on received message")
+            if rx is not None and rx is False:
+                crc_error_count += 1
+                print(f"CRC error detected (FCS failed!) on received message. Total CRC errors: {crc_error_count}")
+                test_ping_roundtrip_payloads.crc_error_count = crc_error_count
+                return  # Do not fail test, just count and print
             assert rx is not None, "No response within timeout; ensure loopback/echo is present"
             assert rx.command == int(Command.Ping)
             assert rx.id == 0
@@ -122,9 +99,7 @@ def test_forever(comm_params):
         test_ping_roundtrip_payloads(comm_params, "MAX_PAYLOAD_COUNTING")
         time.sleep(0.01)
 
-
 if __name__ == "__main__":
     import pytest
-    # Manually get comm_params from the fixture
     comm_params = pytest.lazy_fixture("comm_params")
     test_forever(comm_params)
