@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import pytest
 from pathlib import Path
 
@@ -116,4 +118,11 @@ def test_ping_roundtrip_payloads(comm_params, payload) -> None:
 def test_forever(comm_params):
     while True:
         test_ping_roundtrip_payloads(comm_params, "MAX_PAYLOAD_COUNTING")
+        time.sleep(0.01)
 
+
+if __name__ == "__main__":
+    import pytest
+    # Manually get comm_params from the fixture
+    comm_params = pytest.lazy_fixture("comm_params")
+    test_forever(comm_params)
