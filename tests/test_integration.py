@@ -98,9 +98,15 @@ def test_forever(comm_params):
     """
     Run the ping roundtrip test in a loop, printing CRC error count and sleeping between iterations.
     This function is for manual soak/robustness testing and does not assert or return anything.
+    Retries on error and continues forever.
     """
     while True:
-        test_ping_roundtrip_payloads(comm_params, "MAX_PAYLOAD_COUNTING")
+        try:
+            test_ping_roundtrip_payloads(comm_params, "MAX_PAYLOAD_COUNTING")
+        except Exception as ex:
+            print(f"Error in test_ping_roundtrip_payloads: {ex}. Retrying...")
+            time.sleep(1)
+            continue
         print(f"Total CRC errors so far: {getattr(test_ping_roundtrip_payloads, 'crc_error_count', 0)}")
         time.sleep(0.01)
 
