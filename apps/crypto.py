@@ -180,12 +180,16 @@ def main():
                 print(f"Is it dark? {weather.is_dark}")
                 print(f"Is it cloudy? {weather.is_cloudy}")
 
-                if weather.is_light and not weather.is_cloudy:
+                test = True
+                if weather.is_light and not weather.is_cloudy and test:
+                    print("on...")
                     board.send_raw(data=bytes([0xD8, 0x01]))  # on
                 else:
+                    print("off...")
                     board.send_raw(data=bytes([0xD8, 0x00]))  # off
 
                 time.sleep(weather.interval_seconds)
+                weather.process()  # helps if update date on each cycle
         except:
             pass
         time.sleep(3)
