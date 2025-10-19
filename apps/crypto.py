@@ -26,7 +26,7 @@ from metar import Metar
 import tomllib as toml
 
 from embedded_serial_bridge import Comm
-from embedded_serial_bridge.discovery import discover
+from embedded_serial_bridge.auto_discovery import discover
 
 
 class WeatherChecker:
@@ -77,7 +77,7 @@ class WeatherChecker:
         now_utc = datetime.datetime.now(datetime.timezone.utc)
         local_time = now_utc + datetime.timedelta(hours=utc_offset_hours)
         month = local_time.month
-        peak = 3
+        peak = 2.5
         if month in range(6, 13):
             result = month
         elif month in range(1, 6):
@@ -168,31 +168,20 @@ class BoardController:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-# Example usage in main()
 def main():
-    while True:  # forever
-        try:
-            weather = WeatherChecker()
-            board = BoardController()
+    weather = WeatherChecker()
+    print(f"Is it light? {weather.is_light}")
+    print(f"Is it dark? {weather.is_dark}")
+    print(f"Is it cloudy? {weather.is_cloudy}")
 
-            while True:
-                print(f"Is it light? {weather.is_light}")
-                print(f"Is it dark? {weather.is_dark}")
-                print(f"Is it cloudy? {weather.is_cloudy}")
-
-                test = True
-                if weather.is_light and not weather.is_cloudy and test:
-                    print("on...")
-                    board.send_raw(data=bytes([0xD8, 0x01]))  # on
-                else:
-                    print("off...")
-                    board.send_raw(data=bytes([0xD8, 0x00]))  # off
-
-                time.sleep(weather.interval_seconds)
-                weather.process()  # helps if update date on each cycle
-        except:
-            pass
-        time.sleep(3)
+    test = True
+    with BoardController() as board:
+        if weather.is_light and not weather.is_cloudy and test:
+            print("on...")
+            board.send_raw(data=bytes([0xD8, 0x01]))  # on
+        else:
+            print("off...")
+            board.send_raw(data=bytes([0xD8, 0x00]))  # off
 
 if __name__ == "__main__":
     main()

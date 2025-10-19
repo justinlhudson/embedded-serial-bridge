@@ -7,7 +7,7 @@ import click
 # Handle relative imports when run as script vs module
 try:
     from .comm import Comm, Command, Message
-    from .discovery import discover as discover_ports
+    from .auto_discovery import AutoDiscovery
 except ImportError:
     # Add parent directory to path for standalone execution
     parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,62 +15,7 @@ except ImportError:
         sys.path.insert(0, parent_dir)
 
     from embedded_serial_bridge.comm import Comm, Command, Message
-    from embedded_serial_bridge.discovery import discover as discover_ports
-
-try:  # Python 3.11+
-    import tomllib as _toml
-except Exception:  # pragma: no cover - fallback for <3.11
-    try:
-        import tomli as _toml  # type: ignore
-    except Exception as e:  # pragma: no cover
-        _toml = None  # will error when used
-
-
-DEFAULT_CONFIG_PATH = "config.toml"
-
-
-def _get_default_config_path() -> str:
-    """Get the default config path relative to the script location."""
-    # Get the directory containing this script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Go up one level to the project root where config.toml is located
-    project_root = os.path.dirname(script_dir)
-    return os.path.join(project_root, "config.toml")
-
-
-def _load_config(path: str) -> dict:
-    if _toml is None:
-        raise click.ClickException("TOML parser not available. Install 'tomli' for Python <3.11.")
-
-    # If using default path, make it absolute from script location
-    if path == DEFAULT_CONFIG_PATH:
-        path = _get_default_config_path()
-
-    try:
-        with open(path, "rb") as f:
-            return _toml.load(f)
-    except FileNotFoundError:
-        raise click.ClickException(f"Config file not found: {path}")
-    except Exception as e:
-        raise click.ClickException(f"Failed to parse config: {e}")
-
-
-def _resolve_serial(cfg: dict, allow_missing_port: bool = False) -> tuple[str, int, float, bool, int, str]:
-    serial_cfg = cfg.get("serial", {}) if isinstance(cfg, dict) else {}
-    hdlc_cfg = cfg.get("hdlc", {}) if isinstance(cfg, dict) else {}
-    fmt_cfg = cfg.get("format", {}) if isinstance(cfg, dict) else {}
-    port = serial_cfg.get("port")
-    if not port and not allow_missing_port:
-        raise click.ClickException("Missing 'serial.port' in config")
-    baudrate = int(serial_cfg.get("baudrate", 115200))
-    timeout = float(serial_cfg.get("timeout", 0.2))
-    # Always escape control; only read CRC and max payload from config
-    crc_enabled = bool(hdlc_cfg.get("crc_enabled", False))
-    max_payload = int(hdlc_cfg.get("max_payload", 4096))
-    if not (0 < max_payload <= 65535):
-        raise click.ClickException("hdlc.max_payload must be in 1..65535 (fits u16 length)")
-    encoding = str(fmt_cfg.get("encoding", "utf-8"))
-    return port or "", baudrate, timeout, crc_enabled, max_payload, encoding
+    from embedded_serial_bridge.auto_discovery import AutoDiscovery
 
 
 def _parse_command(value: str) -> int:
@@ -109,65 +54,56 @@ def _build_payload(string: Optional[str], hexstr: Optional[str], encoding: str) 
 
 @click.command()
 @click.argument("command")
-@click.option("--config", "config_path", type=click.Path(dir_okay=False), default=DEFAULT_CONFIG_PATH, show_default=True, help="Path to config.toml")
+@click.option("-p", "--port", help="Serial port (e.g., /dev/ttyUSB0, COM3). If not specified, will auto-discover.")
+@click.option("-b", "--baudrate", type=int, default=115200, show_default=True, help="Baud rate")
+@click.option("-t", "--timeout", type=float, default=1.0, show_default=True, help="Read timeout in seconds")
+@click.option("--fcs/--no-fcs", default=False, show_default=True, help="Enable FCS (CRC) validation")
+@click.option("--payload-limit", type=int, default=4096, show_default=True, help="Maximum payload size")
 @click.option("-s", "string", help="String payload (mutually exclusive with --hex)")
 @click.option("-x", "hex", help="Hex payload, e.g. '01 02 0a' or '01020a'")
-@click.option("--discover", is_flag=True, help="Auto-discover serial port using ping")
-def main(command: str, config_path: str, string: Optional[str], hex: Optional[str],
-         discover: bool) -> None:
-    """Send a command and payload using config.toml for serial settings.
+@click.option("--encoding", default="utf-8", show_default=True, help="Text encoding for string payloads")
+def main(command: str, port: Optional[str], baudrate: int, timeout: float,
+         fcs: bool, payload_limit: int, string: Optional[str], hex: Optional[str],
+         encoding: str) -> None:
+    """Send a command and payload over serial.
 
     COMMAND can be symbolic (ping, ack, nak, raw) or numeric (0x03, 3).
 
     Examples:
 
-      # Send ping command with empty payload
+      # Auto-discover port and send ping
       embedded-serial-bridge ping
 
-      # Send ping with text payload
-      embedded-serial-bridge ping -s "hello world"
+      # Send ping with text payload to specific port
+      embedded-serial-bridge ping -p /dev/ttyUSB0 -s "hello world"
 
       # Send raw command with hex payload
-      embedded-serial-bridge raw -x "01 02 03 04"
+      embedded-serial-bridge raw -x "01 02 03 04" -p COM3
 
-      # Auto-discover serial port and send ping
-      embedded-serial-bridge ping --discover
-
-      # Send command using custom config file
-      embedded-serial-bridge ping --config my-config.toml -s "test"
+      # Use custom settings
+      embedded-serial-bridge ping -p /dev/ttyUSB0 -b 9600 --fcs --payload-limit 128
     """
 
-    cfg = _load_config(config_path)
-    port, baudrate, timeout, crc_enabled, max_payload, encoding = _resolve_serial(cfg, allow_missing_port=discover)
-
-    # Handle --discover
-    if discover:
+    # Auto-discover port if not specified
+    if not port:
         click.echo("Auto-discovering serial port...")
-        # Use absolute config path for discovery if using default
-        discovery_config_path = config_path
-        if config_path == DEFAULT_CONFIG_PATH:
-            discovery_config_path = _get_default_config_path()
-
-        discovered_port = discover_ports(config_path=discovery_config_path)
+        discovery = AutoDiscovery(baudrate=baudrate, timeout=timeout, fcs=fcs, payload_limit=payload_limit)
+        discovered_port = discovery.discover()
         if discovered_port:
             click.echo(f"Using discovered port: {discovered_port}")
             port = discovered_port
         else:
-            raise click.ClickException("No responding serial port found. Check connections or try running discovery.py directly.")
-
-    # Ensure we have a port at this point
-    if not port:
-        raise click.ClickException("No serial port specified. Use --discover or set serial.port in config.toml")
+            raise click.ClickException("No responding serial port found. Specify port with -p/--port option.")
 
     cmd_val = _parse_command(command)
     payload = _build_payload(string, hex, encoding)
 
-    # Defaults when options removed
+    # Message defaults
     msg_id = 0
     fragments = 1
     fragment = 0
 
-    with Comm(port, baudrate=baudrate, timeout=timeout, crc_enabled=crc_enabled, max_payload=max_payload) as c:
+    with Comm(port, baudrate=baudrate, timeout=timeout, fcs=fcs, payload_limit=payload_limit) as c:
         try:
             # Use high-level Message API
             msg = Message(command=cmd_val, id=msg_id, fragments=fragments, fragment=fragment, length=len(payload), payload=payload)
@@ -178,7 +114,7 @@ def main(command: str, config_path: str, string: Optional[str], hex: Optional[st
             click.echo("Waiting for response...")
             response = c.read(timeout=3.0, message=True)  # Wait up to 3 seconds for response
 
-            if response is not None:
+            if response is not None and not isinstance(response, bytes):
                 click.echo(f"Received response:")
                 click.echo(f"  Command: 0x{response.command:04x} ({response.command})")
                 click.echo(f"  ID: {response.id}")

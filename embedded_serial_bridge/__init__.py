@@ -11,6 +11,6 @@ __all__ = [
 ]
 
 from .comm import Comm, Command, Message
-from .discovery import discover
+from .auto_discovery import discover
 
 __version__ = "0.1.0"

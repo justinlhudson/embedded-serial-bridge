@@ -6,7 +6,7 @@ import serial
 from .hdlc import HDLC
 from enum import IntEnum
 
-DEFAULT_MAX_PAYLOAD: int = 4096
+DEFAULT_MAX_PAYLOAD: int = 128
 
 
 class Command(IntEnum):
