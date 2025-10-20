@@ -125,7 +125,7 @@ class AutoDiscovery:
             # Any error means this port doesn't work
             return False
 
-    def discover(self) -> Optional[str]:
+    def run(self) -> Optional[str]:
         """
         Discover the correct serial port by testing with ping commands.
 
@@ -150,9 +150,30 @@ class AutoDiscovery:
         return None
 
 
+def discover(
+    baudrate: int = 115200,
+    timeout: float = 1.0,
+    fcs: bool = False,
+    payload_limit: int = DEFAULT_MAX_PAYLOAD
+) -> Optional[str]:
+    """
+    Public function to discover serial port.
+
+    Args:
+        baudrate: Baud rate for communication (default: 115200)
+        timeout: Timeout for response in seconds (default: 1.0)
+        fcs: Enable FCS validation (default: False)
+        payload_limit: Maximum payload size (default: DEFAULT_MAX_PAYLOAD)
+
+    Returns:
+        Path to working serial port, or None if none found
+    """
+    discovery = AutoDiscovery(baudrate=baudrate, timeout=timeout, fcs=fcs, payload_limit=payload_limit)
+    return discovery.run()
+
+
 if __name__ == "__main__":
-    discovery = AutoDiscovery()
-    port = discovery.discover()
+    port = discover()
     if port:
         print(f"\n{port}")
         sys.exit(0)
