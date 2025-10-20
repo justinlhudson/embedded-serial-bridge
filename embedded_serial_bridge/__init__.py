@@ -7,10 +7,8 @@ __all__ = [
     "Comm",
     "Command",
     "Message",
-    "discover",
 ]
 
 from .comm import Comm, Command, Message
-from .discovery import discover
 
 __version__ = "0.1.0"

@@ -1,44 +1,29 @@
 from __future__ import annotations
 
 import time
+from typing import cast
 
 import pytest
-from pathlib import Path
 
 import serial  # type: ignore
 
 from embedded_serial_bridge.comm import Comm, Message, Command
-from embedded_serial_bridge import discovery as _discovery
-from embedded_serial_bridge.discovery import discover
+from embedded_serial_bridge.auto_discovery import AutoDiscovery
 
-try:  # Python 3.11+
-    import tomllib as _toml
-except Exception:  # pragma: no cover
-    try:
-        import tomli as _toml  # type: ignore
-    except Exception:
-        _toml = None
-
-
-def _load_config():
-    if _toml is None:
-        pytest.skip("TOML parser unavailable; install 'tomli' for Python <3.11", allow_module_level=True)  # type: ignore
-    root = Path(__file__).resolve().parents[1]
-    cfg_path = root / "config.toml"
-    with cfg_path.open("rb") as f:
-        return cfg_path, _toml.load(f)
 
 @pytest.fixture(scope="module")
 def comm_params():
-    cfg_path, cfg = _load_config()
-    serial_cfg = cfg.get("serial", {})
-    hdlc_cfg = cfg.get("hdlc", {})
-    baudrate = int(serial_cfg.get("baudrate", 115200))
-    timeout = float(serial_cfg.get("timeout", 0.5))
-    fcs = bool(hdlc_cfg.get("fcs", False))
-    payload_limit = int(hdlc_cfg.get("payload_limit", 4096))
-    preferred_port = serial_cfg.get("port")
-    port = discover(cfg_path)
+    """Get communication parameters with defaults."""
+    baudrate = 115200
+    timeout = 0.5
+    fcs = False
+    payload_limit = 4096
+
+    discovery = AutoDiscovery(baudrate=baudrate, timeout=timeout, fcs=fcs, payload_limit=payload_limit)
+    port = discovery.run()
+
+    if port is None:
+        pytest.skip("No serial port found during discovery")
 
     return {
         "port": port,
@@ -86,6 +71,9 @@ def test_ping_roundtrip_payloads(comm_params, payload) -> None:
                 test_ping_roundtrip_payloads.crc_error_count = crc_error_count
                 return  # Do not fail test, just count and print
             assert rx is not None, "No response within timeout; ensure loopback/echo is present"
+            if isinstance(rx, bytes):
+                pytest.fail("Received raw bytes instead of Message")
+            rx = cast(Message, rx)
             assert rx.command == int(Command.Ping)
             assert rx.id == 0
             assert rx.fragments == 1

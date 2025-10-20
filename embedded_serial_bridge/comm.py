@@ -6,7 +6,7 @@ import serial
 from .hdlc import HDLC
 from enum import IntEnum
 
-DEFAULT_MAX_PAYLOAD: int = 4096
+DEFAULT_MAX_PAYLOAD: int = 128
 
 
 class Command(IntEnum):
@@ -100,6 +100,29 @@ class Message:
         payload = data[9:9 + length]
         return cls(command=command, id=id_, fragments=fragments, fragment=fragment, length=length, payload=payload)
 
+    @staticmethod
+    def make(command: int, payload: bytes) -> "Message":
+        """
+        Create a Message with only command and payload specified. All other fields are set to protocol defaults:
+        - id: 0
+        - fragments: 1
+        - fragment: 0
+        - length: len(payload)
+        Args:
+            command (int): Command type (u16)
+            payload (bytes): Message payload
+        Returns:
+            Message: Constructed message
+        """
+        return Message(
+            command=command,
+            id=0,
+            fragments=1,
+            fragment=0,
+            length=len(payload),
+            payload=payload
+        )
+
 
 class Comm:
     """
@@ -156,13 +179,13 @@ class Comm:
         """
         self.close()
 
-    def write(self, data: Union[bytes, Message]) -> int:
+    def write(self, data: Union[bytes, Message]) -> bool:
         """
         Write a raw payload or Message to the serial port.
         Args:
             data (bytes or Message): Data to send
         Returns:
-            int: Number of bytes written
+            bool: True if any bytes were written, False otherwise
         Raises:
             ValueError: If payload exceeds payload_limit
         """
@@ -176,7 +199,7 @@ class Comm:
             if len(raw) > self._payload_limit:
                 raise ValueError(f"payload too large (max {self._payload_limit} bytes)")
             frame = self._hdlc.encode(raw)
-        return self._serial.write(frame)
+        return self._serial.write(frame) > 0
 
     def read(self, timeout: Optional[float] = None, *, message: bool = True) -> Optional[Union[bytes, Message]]:
         """
