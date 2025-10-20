@@ -20,7 +20,7 @@ def comm_params():
     payload_limit = 4096
 
     discovery = AutoDiscovery(baudrate=baudrate, timeout=timeout, fcs=fcs, payload_limit=payload_limit)
-    port = discovery.discover()
+    port = discovery.run()
 
     if port is None:
         pytest.skip("No serial port found during discovery")

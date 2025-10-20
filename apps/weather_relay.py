@@ -20,7 +20,8 @@ from suntime import Sun  # type: ignore
 import ephem  # type: ignore
 from metar import Metar
 
-from embedded_serial_bridge import Comm, discover
+from embedded_serial_bridge import Comm
+from embedded_serial_bridge.auto_discovery import AutoDiscovery
 
 
 def _load_module_toml_config(module_file: str) -> dict:
@@ -164,7 +165,8 @@ class BoardController:
 
     def __init__(self, port=None, baudrate=115200, timeout=0.1):
         if port is None:
-            port = discover()
+            discovery = AutoDiscovery(baudrate=baudrate, timeout=timeout)
+            port = discovery.run()
             if port is None:
                 raise RuntimeError("No serial port found by discovery.")
 
@@ -200,14 +202,6 @@ class BoardController:
 def main():
     """
     Main function demonstrating weather-based relay control.
-
-    Configuration is loaded from weather_relay.toml if it exists, with fallback defaults.
-    Example config in weather_relay.toml:
-        [weather]
-        latitude = 40.7128
-        longitude = -74.0060
-        elevation = 10.0
-        station = 'KJFK'
     """
     # Load configuration from TOML file if available
     config = _load_module_toml_config(__file__)
@@ -241,4 +235,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

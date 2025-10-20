@@ -47,17 +47,22 @@ See [embassy-stm32-starter](https://github.com/justinlhudson/embassy-stm32-start
 
 ```python
 from embedded_serial_bridge import Comm, Command, Message
-from embedded_serial_bridge.discovery import AutoDiscovery
+from embedded_serial_bridge.auto_discovery import AutoDiscovery
 
 # Auto-discover serial port
-discovery = AutoDiscovery(baudrate=115200, timeout=1.0, fcs=False, payload_limit=4096)
-port = discovery.discover()
+discovery = AutoDiscovery(baudrate=115200, timeout=1.0)
+port = discovery.run()
 
 # Use the communication interface
-with Comm(port, baudrate=115200, timeout=1.0, fcs=False, payload_limit=4096) as comm:
-    msg = Message(command=int(Command.Ping), id=0, fragments=1, fragment=0, length=0, payload=b"")
+with Comm(port, baudrate=115200, timeout=1.0, fcs=True, payload_limit=128) as comm:
+    # Simple way: use Message.make() with command and payload
+    msg = Message.make(command=Command.Ping, payload=b"hello")
     comm.write(msg)
     response = comm.read(timeout=1.0, message=True)
+    
+    # Advanced: full control over all message fields
+    msg = Message(command=int(Command.Raw), id=0, fragments=1, fragment=0, length=5, payload=b"hello")
+    comm.write(msg)
 ```
 
 ## Examples

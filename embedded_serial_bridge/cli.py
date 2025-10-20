@@ -88,7 +88,7 @@ def main(command: str, port: Optional[str], baudrate: int, timeout: float,
     if not port:
         click.echo("Auto-discovering serial port...")
         discovery = AutoDiscovery(baudrate=baudrate, timeout=timeout, fcs=fcs, payload_limit=payload_limit)
-        discovered_port = discovery.discover()
+        discovered_port = discovery.run()
         if discovered_port:
             click.echo(f"Using discovered port: {discovered_port}")
             port = discovered_port
