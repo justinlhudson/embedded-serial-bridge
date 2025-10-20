@@ -1,9 +1,9 @@
 """
-crypto.py - Weather and Board Control Application
+weather_relay.py - Weather-Based Relay Control Application
 
 This module provides the WeatherChecker and BoardController classes for controlling hardware
 via a serial bridge based on weather and time conditions. The main loop periodically checks
-weather conditions and controls a board pin accordingly.
+weather conditions and controls a board relay accordingly.
 
 Classes:
     WeatherChecker: Computes sun position and fetches cloud state.
@@ -24,7 +24,7 @@ from embedded_serial_bridge import Comm, discover
 
 
 def _load_module_toml_config(module_file: str) -> dict:
-    """Load TOML file with the same base name as `module_file` (e.g., `crypto.toml`)."""
+    """Load TOML file with the same base name as `module_file` (e.g., `weather_relay.toml`)."""
     toml_path = Path(module_file).with_suffix(".toml")
     if not toml_path.exists():
         return {}
@@ -199,10 +199,10 @@ class BoardController:
 
 def main():
     """
-    Main function demonstrating weather-based board control.
+    Main function demonstrating weather-based relay control.
 
-    Configuration is loaded from crypto.toml if it exists, with fallback defaults.
-    Example config in crypto.toml:
+    Configuration is loaded from weather_relay.toml if it exists, with fallback defaults.
+    Example config in weather_relay.toml:
         [weather]
         latitude = 40.7128
         longitude = -74.0060
@@ -241,3 +241,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

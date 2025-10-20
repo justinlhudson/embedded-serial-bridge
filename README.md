@@ -60,6 +60,18 @@ with Comm(port, baudrate=115200, timeout=1.0, fcs=False, payload_limit=4096) as 
     response = comm.read(timeout=1.0, message=True)
 ```
 
+## Examples
+
+### Weather-Based Relay Control
+
+The `apps/weather_relay.py` application demonstrates a practical use case: controlling a hardware relay based on weather conditions and sun position. It automatically turns on a relay when it's light outside and the sky is clear, and turns it off when it's dark or cloudy.
+
+**Features:**
+- Calculates sun position using astronomical data (latitude, longitude, elevation)
+- Fetches real-time cloud cover from METAR weather stations
+- Auto-discovers serial ports to communicate with embedded hardware
+- Configurable via `weather_relay.toml` with sensible defaults
+
 ## License
 
 MIT
