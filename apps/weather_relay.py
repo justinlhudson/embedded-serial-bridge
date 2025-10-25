@@ -16,7 +16,6 @@ Example:
 #!/usr/bin/env python3
 import datetime
 from pathlib import Path
-from suntime import Sun  # type: ignore
 import ephem  # type: ignore
 from metar import Metar
 
@@ -85,27 +84,6 @@ class WeatherChecker:
         """Return the last fetched cloud state (True/False). Call process() to refresh."""
         return self._cloudy
 
-    def _sun_out(self):
-        """Calculate sun angle offset based on current month."""
-        # Use the observer's longitude to estimate the local timezone offset from UTC
-        # This is a rough estimate: 15 degrees longitude per hour offset
-        utc_offset_hours = int(round(self.longitude / 15.0))
-
-        # Get the current UTC time and apply the offset to get local month
-        now_utc = datetime.datetime.now(datetime.timezone.utc)
-        local_time = now_utc + datetime.timedelta(hours=utc_offset_hours)
-        month = local_time.month
-
-        peak = 2.5
-        if month in range(6, 13):
-            result = month
-        elif month in range(1, 6):
-            result = (12 - month)
-        else:
-            result = month
-        result = result ** (1 + (peak / 10))
-        return result
-
     def _fetch_cloudy(self):
         """Fetch and return True if current METAR report indicates cloudy (BKN or OVC), else False."""
         try:
@@ -132,7 +110,6 @@ class WeatherChecker:
         This is called to refresh state.
         """
         self.utc = datetime.datetime.now(datetime.timezone.utc)
-        self.sun = Sun(self.latitude, self.longitude)
 
         self.observer = ephem.Observer()
         self.observer.lat = str(self.latitude)
@@ -145,7 +122,8 @@ class WeatherChecker:
         self.observer.date = self.utc  # Set observer date to current UTC
         self.sun_ephem.compute(self.observer)
         self.sun_angle = self.sun_ephem.alt / ephem.degree
-        self.sun_angle_offset = self._sun_out()
+        #self.sun_angle_offset = -6.0  # Civil twilight
+        self.sun_angle_offset = 8  # summer: ~7am-8pm, winter: ~8:30am-3:30pm
 
         # Fetch and set cloud state
         self._cloudy = self._fetch_cloudy()
