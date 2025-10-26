@@ -12,16 +12,16 @@ Classes:
 Example:
     Run this script directly to start the main control loop.
 """
-
 #!/usr/bin/env python3
 import datetime
 from pathlib import Path
 import ephem  # type: ignore
 from metar import Metar
-
 from embedded_serial_bridge import Comm
 from embedded_serial_bridge.auto_discovery import AutoDiscovery
+import logging
 
+_logger = logging.getLogger(__name__)
 
 def _load_module_toml_config(module_file: str) -> dict:
     """Load TOML file with the same base name as `module_file` (e.g., `weather_relay.toml`)."""
@@ -33,7 +33,7 @@ def _load_module_toml_config(module_file: str) -> dict:
         with toml_path.open("rb") as f:
             return tomllib.load(f)
     except (ImportError, ModuleNotFoundError):
-        try:
+        try:  # type: ignore
             import toml  # fallback to third-party package
             return toml.load(toml_path)
         except Exception:
@@ -58,21 +58,27 @@ class WeatherChecker:
         latitude: float,
         longitude: float,
         elevation: float = 0.0,
-        station: str = "KJFK"
+        angle: float = -6,  # civil twilight
+        station: str = "KJFK",
     ):
+        self.sun_ephem = ephem.Sun()  # where is that silly sun
+        self.observer = ephem.Observer()  # lat. long. fun
+        self.sun_angle = 0 # horizon
+        self._cloudy = True  # assume worst case
+        self.angle = angle
         self.latitude = latitude
         self.longitude = longitude
         self.elevation = elevation
         self.station = station.strip("'")
 
-        self.process()
+        self.refresh()
 
     @property
     def is_light(self):
         """Return True if sun is above the calculated angle threshold."""
         self.sun_ephem.compute(self.observer)
         sun_angle = self.sun_ephem.alt / ephem.degree
-        return sun_angle >= self.sun_angle_offset
+        return sun_angle >= self.angle
 
     @property
     def is_dark(self):
@@ -101,29 +107,24 @@ class WeatherChecker:
             for sky in obs.sky:
                 if sky[0] in ['BKN', 'OVC']:
                     return True
-            return False
-        except Exception:
-            return False
+        except Exception as ex:
+            _logger.warning("Failed to fetch or parse METAR data for station %s", self.station)
+        return False
 
-    def process(self):
+    def refresh(self):
         """
         This is called to refresh state.
         """
-        self.utc = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.timezone.utc)
 
-        self.observer = ephem.Observer()
         self.observer.lat = str(self.latitude)
         self.observer.lon = str(self.longitude)
         self.observer.elevation = self.elevation
         self.observer.compute_pressure()
 
-        # Initialize sun_ephem and compute sun angle at current UTC time
-        self.sun_ephem = ephem.Sun()
-        self.observer.date = self.utc  # Set observer date to current UTC
+        self.observer.date = now  # UTC
         self.sun_ephem.compute(self.observer)
         self.sun_angle = self.sun_ephem.alt / ephem.degree
-        #self.sun_angle_offset = -6.0  # Civil twilight
-        self.sun_angle_offset = 8  # summer: ~7am-8pm, winter: ~8:30am-3:30pm
 
         # Fetch and set cloud state
         self._cloudy = self._fetch_cloudy()
@@ -188,13 +189,15 @@ def main():
     # Fallback to example default values (New York City) if not provided in config
     latitude = weather_config.get("latitude", 40.7128)
     longitude = weather_config.get("longitude", -74.0060)
-    elevation = weather_config.get("elevation", 10.0)
+    elevation = weather_config.get("elevation", 10.0)  # meters
+    angle = weather_config.get("sun_angle_offset", -6)  # civil twilight
     station = weather_config.get("station", "KJFK")
 
     weather = WeatherChecker(
         latitude=latitude,
         longitude=longitude,
         elevation=elevation,
+        angle=angle,
         station=station
     )
 
