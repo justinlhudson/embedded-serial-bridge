@@ -108,7 +108,13 @@ class WeatherChecker:
                 if sky[0] in ['BKN', 'OVC']:
                     return True
         except Exception as ex:
-            _logger.warning("Failed to fetch or parse METAR data for station %s", self.station)
+            # Log the station and the exception message; include traceback for debugging.
+            _logger.warning(
+                "Failed to fetch or parse METAR data for station %s: %s",
+                self.station,
+                ex,
+                exc_info=True,
+            )
         return False
 
     def refresh(self):
@@ -190,7 +196,7 @@ def main():
     latitude = weather_config.get("latitude", 40.7128)
     longitude = weather_config.get("longitude", -74.0060)
     elevation = weather_config.get("elevation", 10.0)  # meters
-    angle = weather_config.get("sun_angle_offset", -6)  # civil twilight
+    angle = weather_config.get("angle", -6)  # civil twilight
     station = weather_config.get("station", "KJFK")
 
     weather = WeatherChecker(
