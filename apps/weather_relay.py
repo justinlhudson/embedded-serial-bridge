@@ -22,6 +22,15 @@ from embedded_serial_bridge.auto_discovery import AutoDiscovery
 import logging
 
 _logger = logging.getLogger(__name__)
+# Ensure module logger emits debug messages. If no logging configuration exists yet,
+# configure the root logger to show DEBUG messages with a simple format so output
+# is visible when running this script directly.
+_logger.setLevel(logging.DEBUG)
+if not logging.getLogger().hasHandlers():
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
 
 def _load_module_toml_config(module_file: str) -> dict:
     """Load TOML file with the same base name as `module_file` (e.g., `weather_relay.toml`)."""
@@ -102,6 +111,7 @@ class WeatherChecker:
             with urllib.request.urlopen(url, context=ssl_context) as response:
                 metar_text = response.read().decode('utf-8').split('\n')[1]
             obs = Metar.Metar(metar_text)
+            _logger.debug(obs)
 
             # Check for broken (BKN) or overcast (OVC) clouds
             for sky in obs.sky:
@@ -211,13 +221,18 @@ def main():
     print(f"Is it dark? {weather.is_dark}")
     print(f"Is it cloudy? {weather.is_cloudy}")
 
-    with BoardController() as board:
-        if weather.is_light and not weather.is_cloudy:
-            print("Turning on (light and clear)...")
-            board.send_raw(data=bytes([0xD8, 0x01]))  # on
-        else:
-            print("Turning off (dark or cloudy)...")
-            board.send_raw(data=bytes([0xD8, 0x00]))  # off
+    # Use context manager for BoardController and catch discovery failure at creation time.
+    try:
+        with BoardController() as board:
+            if weather.is_light and not weather.is_cloudy:
+                print("Turning on (light and clear)...")
+                board.send_raw(data=bytes([0xD8, 0x01]))  # on
+            else:
+                print("Turning off (dark or cloudy)...")
+                board.send_raw(data=bytes([0xD8, 0x00]))  # off
+    except RuntimeError as e:
+        _logger.error("BoardController unavailable: %s - skipping board operations.", e)
+        _logger.info("No serial board available; completed checks without hardware control.")
 
 
 if __name__ == "__main__":

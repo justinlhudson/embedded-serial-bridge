@@ -13,6 +13,9 @@ import uuid
 from typing import Optional
 from serial.tools import list_ports  # type: ignore
 import serial  # type: ignore
+import logging
+
+_logger = logging.getLogger(__name__)
 
 # Add the parent directory to Python path so we can import the package
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -134,19 +137,18 @@ class AutoDiscovery:
         """
         ports_to_test = self._get_likely_ports()
 
-        print(f"Discovering serial port on {platform.system()}...")
-        print(f"Testing {len(ports_to_test)} port(s)...")
+        _logger.info("Discovering serial port on %s... Testing %d port(s)...", platform.system(), len(ports_to_test))
 
         for port in ports_to_test:
-            print(f"Testing {port}...", end=" ", flush=True)
+            _logger.debug("Testing %s...", port)
 
             if self._ping_port_test(port):
-                print("✓ FOUND")
+                _logger.debug("\u2713 FOUND")
                 return port
             else:
-                print("✗")
+                _logger.debug("\u2717")
 
-        print("No responding serial port found.")
+        _logger.warning("No responding serial port found.")
         return None
 
 
