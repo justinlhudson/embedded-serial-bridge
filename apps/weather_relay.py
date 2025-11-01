@@ -59,7 +59,9 @@ class WeatherChecker:
         latitude: Location latitude in degrees
         longitude: Location longitude in degrees
         elevation: Location elevation in meters
+        angle: Sun angle threshold in degrees (default: -6 for civil twilight)
         station: METAR station code for cloud data (e.g., 'KJFK')
+        visibility: Minimum visibility in statute miles (default: 6.0)
     """
 
     def __init__(
@@ -69,16 +71,19 @@ class WeatherChecker:
         elevation: float = 0.0,
         angle: float = -6,  # civil twilight
         station: str = "KJFK",
+        visibility: float = 6.0,  # statute miles
     ):
         self.sun_ephem = ephem.Sun()  # where is that silly sun
         self.observer = ephem.Observer()  # lat. long. fun
         self.sun_angle = 0 # horizon
         self._cloudy = True  # assume worst case
+        self._visible = False  # assume worst case
         self.angle = angle
         self.latitude = latitude
         self.longitude = longitude
         self.elevation = elevation
         self.station = station.strip("'")
+        self.visibility = visibility
 
         self.refresh()
 
@@ -99,8 +104,13 @@ class WeatherChecker:
         """Return the last fetched cloud state (True/False). Call process() to refresh."""
         return self._cloudy
 
-    def _fetch_cloudy(self):
-        """Fetch and return True if current METAR report indicates cloudy (BKN or OVC), else False."""
+    @property
+    def is_visible(self):
+        """Return True if visibility is greater than threshold. Call refresh() to update."""
+        return self._visible
+
+    def _fetch_metar(self):
+        """Fetch METAR report and update cloudy and visibility state."""
         try:
             import urllib.request
             import ssl
@@ -113,10 +123,40 @@ class WeatherChecker:
             obs = Metar.Metar(metar_text)
             _logger.debug(obs)
 
+            self._visible = False
+            visibility_sm = 0
+            for unit in hasattr(obs.vis, 'legal_units') and obs.vis.legal_units:
+                try:
+                    vis_value = obs.vis.value(unit)
+                    if vis_value is not None:
+                        # Convert to statute miles
+                        unit_upper = unit.upper()
+                        if unit_upper in ['SM', 'MI']:
+                            visibility_sm = vis_value
+                        elif unit_upper == 'M':
+                            visibility_sm = vis_value / 1609.344  # meters to miles
+                        elif unit_upper == 'KM':
+                            visibility_sm = vis_value * 0.621371  # km to miles
+                        elif unit_upper == 'FT':
+                            visibility_sm = vis_value / 5280.0  # feet to miles
+                        elif unit_upper == 'IN':
+                            visibility_sm = vis_value / 63360.0  # inches to miles
+                        else:
+                            continue  # Unknown unit, try next
+                        _logger.debug(f"Visibility: {vis_value} {unit} = {visibility_sm:.2f} SM (threshold: {self.visibility} SM)")
+                        break
+                except (ValueError, TypeError):
+                    continue
+
+            if visibility_sm is not None:
+                self._visible = visibility_sm > self.visibility
+
             # Check for broken (BKN) or overcast (OVC) clouds
+            self._cloudy = False
             for sky in obs.sky:
                 if sky[0] in ['BKN', 'OVC']:
-                    return True
+                    self._cloudy = True
+                    break
         except Exception as ex:
             # Log the station and the exception message; include traceback for debugging.
             _logger.warning(
@@ -125,7 +165,9 @@ class WeatherChecker:
                 ex,
                 exc_info=True,
             )
-        return False
+            # assume worst case on error
+            self._visible = False
+            self._cloudy = True
 
     def refresh(self):
         """
@@ -142,8 +184,8 @@ class WeatherChecker:
         self.sun_ephem.compute(self.observer)
         self.sun_angle = self.sun_ephem.alt / ephem.degree
 
-        # Fetch and set cloud state
-        self._cloudy = self._fetch_cloudy()
+        # fetch weather station information
+        self._fetch_metar()
 
 
 class BoardController:
@@ -208,23 +250,26 @@ def main():
     elevation = weather_config.get("elevation", 10.0)  # meters
     angle = weather_config.get("angle", -6)  # civil twilight
     station = weather_config.get("station", "KJFK")
+    visibility = weather_config.get("visibility", 6.0)  # statute miles
 
     weather = WeatherChecker(
         latitude=latitude,
         longitude=longitude,
         elevation=elevation,
         angle=angle,
-        station=station
+        station=station,
+        visibility=visibility
     )
 
     print(f"Is it light? {weather.is_light}")
     print(f"Is it dark? {weather.is_dark}")
     print(f"Is it cloudy? {weather.is_cloudy}")
+    print(f"Is visibility good? {weather.is_visible}")
 
     # Use context manager for BoardController and catch discovery failure at creation time.
     try:
         with BoardController() as board:
-            if weather.is_light and not weather.is_cloudy:
+            if weather.is_light and not weather.is_cloudy and weather.is_visible:
                 print("Turning on (light and clear)...")
                 board.send_raw(data=bytes([0xD8, 0x01]))  # on
             else:
