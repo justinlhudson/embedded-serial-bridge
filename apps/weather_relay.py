@@ -13,6 +13,7 @@ Example:
     Run this script directly to start the main control loop.
 """
 #!/usr/bin/env python3
+import argparse
 import datetime
 from pathlib import Path
 import ephem  # type: ignore
@@ -123,40 +124,36 @@ class WeatherChecker:
             obs = Metar.Metar(metar_text)
             _logger.debug(obs)
 
+            # Visibility — use SM directly; independent of cloud check
             self._visible = False
-            visibility_sm = 0
-            for unit in hasattr(obs.vis, 'legal_units') and obs.vis.legal_units:
+            if obs.vis is not None:
                 try:
-                    vis_value = obs.vis.value(unit)
-                    if vis_value is not None:
-                        # Convert to statute miles
-                        unit_upper = unit.upper()
-                        if unit_upper in ['SM', 'MI']:
-                            visibility_sm = vis_value
-                        elif unit_upper == 'M':
-                            visibility_sm = vis_value / 1609.344  # meters to miles
-                        elif unit_upper == 'KM':
-                            visibility_sm = vis_value * 0.621371  # km to miles
-                        elif unit_upper == 'FT':
-                            visibility_sm = vis_value / 5280.0  # feet to miles
-                        elif unit_upper == 'IN':
-                            visibility_sm = vis_value / 63360.0  # inches to miles
-                        else:
-                            continue  # Unknown unit, try next
-                        _logger.debug(f"Visibility: {vis_value} {unit} = {visibility_sm:.2f} SM (threshold: {self.visibility} SM)")
-                        break
+                    visibility_sm = obs.vis.value('SM')
+                    if visibility_sm is not None:
+                        _logger.debug(
+                            f"Visibility: {visibility_sm:.2f} SM (threshold: {self.visibility} SM)"
+                        )
+                        self._visible = visibility_sm > self.visibility
                 except (ValueError, TypeError):
-                    continue
+                    pass
 
-            if visibility_sm is not None:
-                self._visible = visibility_sm > self.visibility
-
-            # Check for broken (BKN) or overcast (OVC) clouds
+            # Check for overcast (OVC) or low broken (BKN) clouds — runs independently
+            # BKN at >= 10,000 ft (BKN100) is not considered cloudy
             self._cloudy = False
             for sky in obs.sky:
-                if sky[0] in ['BKN', 'OVC']:
+                cover = sky[0]
+                if cover == 'OVC':
                     self._cloudy = True
                     break
+                if cover == 'BKN':
+                    height = sky[1]
+                    try:
+                        height_ft = height.value('FT') if height is not None else 0
+                    except (ValueError, TypeError):
+                        height_ft = 0
+                    if height_ft < 10000:
+                        self._cloudy = True
+                        break
         except Exception as ex:
             # Log the station and the exception message; include traceback for debugging.
             _logger.warning(
@@ -240,6 +237,11 @@ def main():
     """
     Main function demonstrating weather-based relay control.
     """
+    parser = argparse.ArgumentParser(description="Weather-based relay control")
+    parser.add_argument("--force", action="store_true",
+                        help="Force relay ON, bypassing weather checks")
+    args = parser.parse_args()
+
     # Load configuration from TOML file if available
     config = _load_module_toml_config(__file__)
     weather_config = config.get("weather", {})  # subset
@@ -266,10 +268,15 @@ def main():
     print(f"Is it cloudy? {weather.is_cloudy}")
     print(f"Is visibility good? {weather.is_visible}")
 
+    should_activate = args.force or (weather.is_light and not weather.is_cloudy and weather.is_visible)
+
+    if args.force:
+        print("--force: bypassing weather checks")
+
     # Use context manager for BoardController and catch discovery failure at creation time.
     try:
         with BoardController() as board:
-            if weather.is_light and not weather.is_cloudy and weather.is_visible:
+            if should_activate:
                 print("Turning on (light and clear)...")
                 board.send_raw(data=bytes([0xD8, 0x01]))  # on
             else:
