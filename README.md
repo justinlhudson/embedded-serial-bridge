@@ -5,7 +5,29 @@ Serial bridge with HDLC framing (CRC‑16/X25) and a minimal CLI.
 - Package: `embedded_serial_bridge`
 - CLI: `embedded-serial-bridge`
 
-## Install
+## Setup
+
+Run the setup script to create a virtual environment, install dependencies, and configure serial port permissions:
+
+```bash
+./setup
+```
+
+This will:
+- Create a `.venv` virtual environment
+- Install all dependencies
+- Add your user to the `dialout` group
+- Install a udev rule so STLink devices are always accessible without `sudo`
+
+## Running
+
+```bash
+./run --help
+```
+
+The `run` script activates the venv and proxies all arguments to the CLI.
+
+## Manual Install
 
 ```bash
 python3 -m pip install -e .
@@ -21,6 +43,9 @@ The CLI auto-discovers serial ports by default. You can also specify options:
 # Auto-discover and send ping
 embedded-serial-bridge ping
 
+# Request firmware version from MCU
+embedded-serial-bridge version
+
 # Specify port and send ping with text payload
 embedded-serial-bridge ping -p /dev/ttyUSB0 -s "hello world"
 
@@ -30,6 +55,14 @@ embedded-serial-bridge raw -x "01 02 0A" -p COM3
 # Custom settings
 embedded-serial-bridge ping -p /dev/ttyUSB0 -b 9600 --fcs --payload-limit 128
 ```
+
+**Commands:**
+- `ping` — send ping (0x03), expects echo
+- `version` — request firmware version (0x05)
+- `ack` — send acknowledge (0x01)
+- `nak` — send negative acknowledge (0x02)
+- `raw` — send raw data (0x04)
+- Numeric commands also accepted: `0x03`, `3`, etc.
 
 **Options:**
 - `-p, --port`: Serial port (auto-discovers if not specified)
@@ -66,6 +99,21 @@ with Comm(port, baudrate=115200, timeout=1.0, fcs=True, payload_limit=128) as co
 ```
 
 ## Examples
+
+### Version Check
+
+The `apps/version_check.py` application pings the board until it responds, then requests the firmware version string. Use it as a quick liveness check to confirm the board is connected and running compatible firmware.
+
+```bash
+# Auto-discover port
+python apps/version_check.py
+
+# Explicit port
+python apps/version_check.py --port /dev/ttyUSB0
+
+# More retries and longer timeout
+python apps/version_check.py --retries 10 --timeout 3.0
+```
 
 ### Weather-Based Relay Control
 
