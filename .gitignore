@@ -1,5 +1,7 @@
 .cadence/*
 .idea/*
 *.pyc
+.venv/
+venv/
 
 apps/*.toml

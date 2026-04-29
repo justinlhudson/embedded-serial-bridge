@@ -128,9 +128,46 @@ class AutoDiscovery:
             # Any error means this port doesn't work
             return False
 
+    # USB descriptor keywords for known embedded/MCU boards
+    _KNOWN_DESCRIPTORS = [
+        "stm32", "stlink", "st-link",           # STM32 / ST-Link
+        "arduino",                               # Arduino
+        "ch340", "ch341",                        # WCH USB-serial (many clones)
+        "cp210", "cp2102", "cp2104",             # Silicon Labs
+        "ftdi", "ft232",                         # FTDI
+        "teensy",                                # PJRC Teensy
+        "esp32", "esp8266",                      # Espressif
+        "pico", "rp2040",                        # Raspberry Pi Pico
+        "nucleo",                                # STM32 Nucleo
+        "discovery",                             # STM32 Discovery
+    ]
+
+    def find_by_descriptor(self) -> Optional[str]:
+        """
+        Find a serial port by matching USB device description against known board keywords.
+        Does not require firmware to respond — useful when firmware is not yet flashed
+        or does not implement the ping protocol.
+
+        Returns:
+            Port path if a known board descriptor is found, None otherwise.
+        """
+        for port_info in list_ports.comports():
+            desc = (port_info.description or "").lower()
+            mfr  = (port_info.manufacturer or "").lower()
+            combined = f"{desc} {mfr}"
+            if any(kw in combined for kw in self._KNOWN_DESCRIPTORS):
+                _logger.info(
+                    "Found board by descriptor: %s (%s)",
+                    port_info.device,
+                    port_info.description,
+                )
+                return port_info.device
+        return None
+
     def run(self) -> Optional[str]:
         """
         Discover the correct serial port by testing with ping commands.
+        Falls back to descriptor-based matching if no port responds to ping.
 
         Returns:
             Path to working serial port, or None if none found
@@ -147,6 +184,11 @@ class AutoDiscovery:
                 return port
             else:
                 _logger.debug("\u2717")
+
+        _logger.debug("No ping response — falling back to descriptor-based discovery.")
+        fallback = self.find_by_descriptor()
+        if fallback:
+            return fallback
 
         _logger.warning("No responding serial port found.")
         return None

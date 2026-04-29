@@ -21,7 +21,7 @@ except ImportError:
 def _parse_command(value: str) -> int:
     # Accept symbolic (ack/nak/ping/raw), hex (0x..), or decimal
     name = value.strip().lower()
-    alias = {"ack": Command.Ack, "nak": Command.Nak, "ping": Command.Ping, "raw": Command.Raw}
+    alias = {"ack": Command.Ack, "nak": Command.Nak, "ping": Command.Ping, "raw": Command.Raw, "version": Command.Version}
     if name in alias:
         return int(alias[name])
     try:

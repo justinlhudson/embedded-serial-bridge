@@ -16,11 +16,13 @@ class Command(IntEnum):
     Nak = 0x02: Negative acknowledge
     Ping = 0x03: Ping (for discovery/echo)
     Raw = 0x04: Raw data
+    Version = 0x05: Request firmware version from MCU
     """
     Ack = 0x01
     Nak = 0x02
     Ping = 0x03
     Raw = 0x04
+    Version = 0x05
 
 class Message:
     """

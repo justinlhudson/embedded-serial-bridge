@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VENV_DIR=".venv"
+PYTHON="${PYTHON:-python3}"
+
+echo "Using Python: $($PYTHON --version)"
+
+# Create virtual environment if it doesn't exist
+if [ ! -d "$VENV_DIR" ]; then
+    echo "Creating virtual environment in $VENV_DIR..."
+    "$PYTHON" -m venv "$VENV_DIR"
+else
+    echo "Virtual environment already exists at $VENV_DIR, skipping creation."
+fi
+
+# Activate
+source "$VENV_DIR/bin/activate"
+
+echo "Upgrading pip..."
+pip install --upgrade pip
+
+echo "Installing embedded-serial-bridge with dev dependencies..."
+pip install -e ".[dev]"
+
+
+# --- Serial port permissions ---
+
+# Add current user to dialout group (grants persistent access to /dev/tty*)
+if ! groups "$USER" | grep -qw dialout; then
+    echo "Adding $USER to dialout group..."
+    sudo usermod -aG dialout "$USER"
+    echo "  NOTE: Log out and back in for group change to take effect."
+else
+    echo "User $USER already in dialout group."
+fi
+
+# Install udev rule so STLink device is always world-readable (MODE 0666)
+UDEV_RULE='SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="374b", MODE="0666"'
+UDEV_FILE="/etc/udev/rules.d/99-stlink.rules"
+
+if [ ! -f "$UDEV_FILE" ] || ! grep -qF "$UDEV_RULE" "$UDEV_FILE"; then
+    echo "Installing udev rule for STLink at $UDEV_FILE..."
+    echo "$UDEV_RULE" | sudo tee "$UDEV_FILE" > /dev/null
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+    echo "  udev rule installed."
+else
+    echo "udev rule already present at $UDEV_FILE."
+fi
+
+echo ""
+echo "Setup complete. Activate the environment with:"
+echo "  source $VENV_DIR/bin/activate"
+echo ""
+echo "Then run the application with:"
+echo "  embedded-serial-bridge --help"
