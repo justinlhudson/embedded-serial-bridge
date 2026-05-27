@@ -8,27 +8,36 @@ class HDLC:
     Implements HDLC framing and CRC-16/X25 for serial communication.
     Features:
         - Escapes FLAG, ESC, and optionally control characters (<0x20)
-        - Adds and validates CRC-16/X25
+        - Optionally adds and validates CRC-16/X25
         - Decodes frames and checks CRC if required
     Args:
         max_frame_len (int): Maximum frame length
         escape_ctrl (bool): Escape control characters
+        use_crc (bool): Append CRC when encoding and strip it when decoding
         require_crc (bool): Require CRC validation on decode
     """
     FLAG: Final[int] = 0x7E
     ESC: Final[int] = 0x7D
     ESC_MASK: Final[int] = 0x20
 
-    def __init__(self, max_frame_len: int = 4096, escape_ctrl: bool = True, require_crc: bool = False):
+    def __init__(
+        self,
+        max_frame_len: int = 4096,
+        escape_ctrl: bool = False,
+        use_crc: bool = True,
+        require_crc: bool = True,
+    ):
         """
         Initialize HDLC framing handler.
         Args:
             max_frame_len (int): Maximum frame length
             escape_ctrl (bool): Escape control characters
+            use_crc (bool): Append CRC when encoding and strip it when decoding
             require_crc (bool): Require CRC validation on decode
         """
         self.escape_ctrl = escape_ctrl
         self.max_frame_len = max_frame_len
+        self.use_crc = use_crc
         self.require_crc = require_crc
         self._buf = bytearray()
         self._esc = False
@@ -77,10 +86,13 @@ class HDLC:
         Returns:
             bytes: Encoded HDLC frame
         """
-        fcs = HDLC._fcs16_ppp(payload)
         frame = bytearray()
         frame.append(HDLC.FLAG)
-        to_send = payload + bytes((fcs & 0xFF, (fcs >> 8) & 0xFF))
+        if self.use_crc:
+            fcs = HDLC._fcs16_ppp(payload)
+            to_send = payload + bytes((fcs & 0xFF, (fcs >> 8) & 0xFF))
+        else:
+            to_send = payload
         for b in to_send:
             if HDLC._needs_escape(b, self.escape_ctrl):
                 frame.append(HDLC.ESC)
@@ -104,10 +116,12 @@ class HDLC:
         for b in data:
             if b == HDLC.FLAG:
                 if self._buf:
-                    payload = self._finalize_frame(self._buf)
-                    if payload is not None:
-                        out.append(payload)
-                    self._buf.clear()
+                    try:
+                        payload = self._finalize_frame(self._buf)
+                        if payload is not None:
+                            out.append(payload)
+                    finally:
+                        self._buf.clear()
                 self._esc = False
                 continue
 
@@ -135,10 +149,6 @@ class HDLC:
         Raises:
             ValueError: If CRC check fails (when require_crc is True)
         """
-        # Frame must contain at least 2 bytes (the CRC)
-        if len(buf) < 2:
-            return None
-
         if self.require_crc:
             # With CRC validation, validate and strip the 2-byte CRC
             if len(buf) < 2:  # Need at least the CRC
@@ -149,10 +159,11 @@ class HDLC:
             if rx_fcs != calc:
                 raise ValueError("FCS failed!")
             return payload
-        else:
-            # Without CRC validation, still strip the 2-byte CRC that was added during encoding
-            # but don't validate it
+        if self.use_crc:
+            if len(buf) < 2:
+                return None
             return bytes(buf[:-2])
+        return bytes(buf)
 
 
 # Backward-compatible module-level aliases

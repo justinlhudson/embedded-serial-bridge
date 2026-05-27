@@ -7,6 +7,8 @@ from .hdlc import HDLC
 from enum import IntEnum
 
 DEFAULT_MAX_PAYLOAD: int = 128
+DEFAULT_WRITE_CHUNK_SIZE: int = 128
+DEFAULT_WRITE_CHUNK_DELAY: float = 0.03
 
 
 class Command(IntEnum):
@@ -75,8 +77,8 @@ class Message:
         pl = bytes(self.payload or b"")
         # length is derived from payload
         length = len(pl)
-        if not (0 <= length <= 0xFFFF):
-            raise ValueError("payload length exceeds u16 limit")
+        if length > DEFAULT_MAX_PAYLOAD:
+            raise ValueError(f"payload too large (max {DEFAULT_MAX_PAYLOAD} bytes)")
         header = bytearray()
         header += int(self.command).to_bytes(2, "little")
         header += int(self.id).to_bytes(1, "little")
@@ -94,11 +96,17 @@ class Message:
         Returns:
             Message: Parsed message
         """
+        if len(data) < cls.HEADER_LEN:
+            raise ValueError("message shorter than header")
         command = int.from_bytes(data[0:2], "little")
         id_ = data[2]
         fragments = int.from_bytes(data[3:5], "little")
         fragment = int.from_bytes(data[5:7], "little")
         length = int.from_bytes(data[7:9], "little")
+        if length > DEFAULT_MAX_PAYLOAD:
+            raise ValueError(f"payload too large (max {DEFAULT_MAX_PAYLOAD} bytes)")
+        if len(data) != cls.HEADER_LEN + length:
+            raise ValueError("message length mismatch")
         payload = data[9:9 + length]
         return cls(command=command, id=id_, fragments=fragments, fragment=fragment, length=length, payload=payload)
 
@@ -141,23 +149,40 @@ class Comm:
     _rx_queue: List[bytes]
     _fcs: bool
     _payload_limit: int
+    _write_chunk_size: int
+    _write_chunk_delay: float
 
-    def __init__(self, port: str, baudrate: int = 115200, timeout: float = 0.1, *, fcs: bool = False, payload_limit: int = DEFAULT_MAX_PAYLOAD, **serial_kwargs) -> None:
+    def __init__(
+        self,
+        port: str,
+        baudrate: int = 115200,
+        timeout: float = 0.1,
+        *,
+        fcs: bool = True,
+        payload_limit: int = DEFAULT_MAX_PAYLOAD,
+        write_chunk_size: int = DEFAULT_WRITE_CHUNK_SIZE,
+        write_chunk_delay: float = DEFAULT_WRITE_CHUNK_DELAY,
+        **serial_kwargs,
+    ) -> None:
         """
         Initialize Comm for serial port communication.
         Args:
             port (str): Serial port name
             baudrate (int): Baud rate
             timeout (float): Read timeout in seconds
-            fcs (bool): Enable FCS (CRC) checking on receive
+            fcs (bool): Send and expect HDLC FCS (CRC)
             payload_limit (int): Maximum allowed payload size
+            write_chunk_size (int): Maximum bytes per serial write
+            write_chunk_delay (float): Delay between serial write chunks
             serial_kwargs: Additional serial.Serial arguments
         """
         # Keep constructor minimal but allow overrides via kwargs (e.g., bytesize, parity, stopbits, rtscts, etc.)
         self._serial = serial.Serial(port=port, baudrate=baudrate, timeout=timeout, write_timeout=1.0, **serial_kwargs)
         self._fcs = bool(fcs)
         self._payload_limit = int(payload_limit)
-        self._hdlc = HDLC(escape_ctrl=True, require_crc=self._fcs)
+        self._write_chunk_size = max(1, int(write_chunk_size))
+        self._write_chunk_delay = max(0.0, float(write_chunk_delay))
+        self._hdlc = HDLC(escape_ctrl=False, use_crc=self._fcs, require_crc=self._fcs)
         self._rx_queue = []
 
     def close(self) -> None:
@@ -201,9 +226,16 @@ class Comm:
             if len(raw) > self._payload_limit:
                 raise ValueError(f"payload too large (max {self._payload_limit} bytes)")
             frame = self._hdlc.encode(raw)
-        return self._serial.write(frame) > 0
+        written = 0
+        for start in range(0, len(frame), self._write_chunk_size):
+            end = start + self._write_chunk_size
+            written += self._serial.write(frame[start:end])
+            self._serial.flush()
+            if end < len(frame) and self._write_chunk_delay:
+                time.sleep(self._write_chunk_delay)
+        return written > 0
 
-    def read(self, timeout: Optional[float] = None, *, message: bool = True) -> Optional[Union[bytes, Message]]:
+    def read(self, timeout: Optional[float] = None, *, message: bool = True) -> Optional[Union[bytes, Message, bool]]:
         """
         Read one HDLC frame from the serial port.
         Args:

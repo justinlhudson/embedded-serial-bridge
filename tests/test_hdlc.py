@@ -75,6 +75,29 @@ class TestHDLC(unittest.TestCase):
         self.assertEqual(out1, [])
         self.assertEqual(out2, [payload])
 
+    def test_without_crc(self):
+        payload = b"no-fcs firmware"
+        hdlc = HDLC(use_crc=False, require_crc=False)
+        frame = hdlc.encode(payload)
+
+        self.assertEqual(frame[0], FLAG)
+        self.assertEqual(frame[-1], FLAG)
+
+        d = HDLC(use_crc=False, require_crc=False)
+        out = d.decode(frame)
+        self.assertEqual(out, [payload])
+
+    def test_failed_crc_resyncs_next_frame(self):
+        first = bytearray(HDLC().encode(b"bad"))
+        first[-3] ^= 0x01
+        second = HDLC().encode(b"good")
+        d = HDLC()
+
+        with self.assertRaises(ValueError):
+            d.decode(bytes(first) + second)
+
+        self.assertEqual(d.decode(second), [b"good"])
+
     def test_empty_and_single_byte_payloads(self):
         # Test edge cases that might lose bytes
         test_cases = [

@@ -33,7 +33,7 @@ class AutoDiscovery:
         self,
         baudrate: int = 115200,
         timeout: float = 1.0,
-        fcs: bool = False,
+        fcs: bool = True,
         payload_limit: int = DEFAULT_MAX_PAYLOAD
     ):
         """
@@ -42,7 +42,7 @@ class AutoDiscovery:
         Args:
             baudrate: Baud rate for communication (default: 115200)
             timeout: Timeout for response in seconds (default: 1.0)
-            fcs: Enable FCS validation (default: False)
+            fcs: Send and expect HDLC FCS (default: True)
             payload_limit: Maximum payload size (default: DEFAULT_MAX_PAYLOAD)
         """
         self.baudrate = baudrate

@@ -16,8 +16,8 @@ def comm_params():
     """Get communication parameters with defaults."""
     baudrate = 115200
     timeout = 0.5
-    fcs = False
-    payload_limit = 4096
+    fcs = True
+    payload_limit = 128
 
     discovery = AutoDiscovery(baudrate=baudrate, timeout=timeout, fcs=fcs, payload_limit=payload_limit)
     port = discovery.run()
@@ -105,6 +105,9 @@ def test_forever(comm_params):
             print(f"\nTotal CRC errors so far: {current_crc_error_count}")
             last_crc_error_count = current_crc_error_count
         time.sleep(0.01)
+
+
+test_forever.__test__ = False
 
 if __name__ == "__main__":
     import pytest

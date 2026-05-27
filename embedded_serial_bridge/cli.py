@@ -57,8 +57,8 @@ def _build_payload(string: Optional[str], hexstr: Optional[str], encoding: str) 
 @click.option("-p", "--port", help="Serial port (e.g., /dev/ttyUSB0, COM3). If not specified, will auto-discover.")
 @click.option("-b", "--baudrate", type=int, default=115200, show_default=True, help="Baud rate")
 @click.option("-t", "--timeout", type=float, default=1.0, show_default=True, help="Read timeout in seconds")
-@click.option("--fcs/--no-fcs", default=False, show_default=True, help="Enable FCS (CRC) validation")
-@click.option("--payload-limit", type=int, default=4096, show_default=True, help="Maximum payload size")
+@click.option("--fcs/--no-fcs", default=True, show_default=True, help="Send and expect HDLC FCS (CRC)")
+@click.option("--payload-limit", type=int, default=128, show_default=True, help="Maximum payload size")
 @click.option("-s", "string", help="String payload (mutually exclusive with --hex)")
 @click.option("-x", "hex", help="Hex payload, e.g. '01 02 0a' or '01020a'")
 @click.option("--encoding", default="utf-8", show_default=True, help="Text encoding for string payloads")
@@ -81,7 +81,7 @@ def main(command: str, port: Optional[str], baudrate: int, timeout: float,
       embedded-serial-bridge raw -x "01 02 03 04" -p COM3
 
       # Use custom settings
-      embedded-serial-bridge ping -p /dev/ttyUSB0 -b 9600 --fcs --payload-limit 128
+      embedded-serial-bridge ping -p /dev/ttyUSB0 -b 9600 --no-fcs --payload-limit 128
     """
 
     # Auto-discover port if not specified

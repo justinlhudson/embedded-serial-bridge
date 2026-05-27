@@ -1,6 +1,6 @@
 # embedded-serial-bridge
 
-Serial bridge with HDLC framing (CRC‑16/X25) and a minimal CLI.
+Serial bridge with HDLC framing and a minimal CLI for the Embassy STM32 starter firmware.
 
 - Package: `embedded_serial_bridge`
 - CLI: `embedded-serial-bridge`
@@ -52,8 +52,8 @@ embedded-serial-bridge ping -p /dev/ttyUSB0 -s "hello world"
 # Send raw command with hex payload
 embedded-serial-bridge raw -x "01 02 0A" -p COM3
 
-# Custom settings
-embedded-serial-bridge ping -p /dev/ttyUSB0 -b 9600 --fcs --payload-limit 128
+# Custom settings, including firmware built without the `hdlc_fcs` feature
+embedded-serial-bridge ping -p /dev/ttyUSB0 -b 9600 --no-fcs --payload-limit 128
 ```
 
 **Commands:**
@@ -68,11 +68,13 @@ embedded-serial-bridge ping -p /dev/ttyUSB0 -b 9600 --fcs --payload-limit 128
 - `-p, --port`: Serial port (auto-discovers if not specified)
 - `-b, --baudrate`: Baud rate (default: 115200)
 - `-t, --timeout`: Read timeout in seconds (default: 1.0)
-- `--fcs/--no-fcs`: Enable FCS (CRC) validation (default: no-fcs)
-- `--payload-limit`: Maximum payload size (default: 4096)
+- `--fcs/--no-fcs`: Send and expect HDLC FCS / CRC-16 (default: fcs)
+- `--payload-limit`: Maximum payload size (default: 128)
 - `-s`: String payload
 - `-x`: Hex payload
 - `--encoding`: Text encoding (default: utf-8)
+
+Host writes are split into 128-byte serial chunks by default. This avoids overrunning the starter firmware's 256-byte idle-line DMA RX buffer when HDLC escaping expands a max-size payload frame.
 
 See [embassy-stm32-starter](https://github.com/justinlhudson/embassy-stm32-starter) for a compatible embedded implementation.
 
