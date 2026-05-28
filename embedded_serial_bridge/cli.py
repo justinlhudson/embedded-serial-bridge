@@ -140,4 +140,6 @@ def main(command: str, port: Optional[str], baudrate: int, timeout: float,
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        sys.argv.append("ping")
     main()
