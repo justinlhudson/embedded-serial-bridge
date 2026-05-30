@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# setup - One-time environment setup for embedded-serial-bridge
+# setup.sh - One-time environment setup for embedded-serial-bridge
 #
 # Creates a Python virtual environment, installs all dependencies,
 # and configures serial port permissions so the STLink board is
 # accessible without sudo on every plug-in.
 #
 # Usage:
-#   ./setup
+#   ./setup.sh
 #
 # Environment variables:
 #   PYTHON  - Python interpreter to use (default: python3)

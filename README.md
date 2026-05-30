@@ -7,25 +7,25 @@ Serial bridge with HDLC framing and a minimal CLI for the Embassy STM32 starter 
 
 ## Setup
 
-Run the setup script to create a virtual environment, install dependencies, and configure serial port permissions:
+Run the setup script to prepare the environment:
 
 ```bash
-./setup
+./setup.sh
 ```
 
-This will:
+It will:
 - Create a `.venv` virtual environment
 - Install all dependencies
 - Add your user to the `dialout` group
-- Install a udev rule so STLink devices are always accessible without `sudo`
+- Install a udev rule so STLink devices are accessible without `sudo`
 
 ## Running
 
 ```bash
-./run --help
+./run.sh --help
 ```
 
-The `run` script activates the venv and proxies all arguments to the CLI.
+The `run.sh` script activates the venv and forwards all arguments to the CLI.
 
 ## Manual Install
 
@@ -104,7 +104,7 @@ with Comm(port, baudrate=115200, timeout=1.0, fcs=True, payload_limit=128) as co
 
 ### Version Check
 
-The `apps/version_check.py` application pings the board until it responds, then requests the firmware version string. Use it as a quick liveness check to confirm the board is connected and running compatible firmware.
+The `apps/version_check.py` application pings the board until it responds, then requests the firmware version string. Use it as a quick liveness check to confirm the board is connected and running com[...]
 
 ```bash
 # Auto-discover port
@@ -119,7 +119,7 @@ python apps/version_check.py --retries 10 --timeout 3.0
 
 ### Weather-Based Relay Control
 
-The `apps/weather_relay.py` application demonstrates a practical use case: controlling a hardware relay based on weather conditions and sun position. It automatically turns on a relay when it's light outside and the sky is clear, and turns it off when it's dark or cloudy.
+The `apps/weather_relay.py` application demonstrates a practical use case: controlling a hardware relay based on weather conditions and sun position. It automatically turns on a relay when it's light [...]
 
 **Features:**
 - Calculates sun position using astronomical data (latitude, longitude, elevation)
